@@ -17,6 +17,48 @@ if (isProduction) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// WebRTC ICE configuration (STUN + TURN)
+// STUN: WEBRTC_STUN_URLS=stun:stun1.example.com:3478,stun:stun2.example.com:3478
+//        Falls back to Google public STUN only in non-production.
+// TURN: WEBRTC_TURN_URL, WEBRTC_TURN_USERNAME, WEBRTC_TURN_CREDENTIAL
+//        All three must be set together. Never hardcoded.
+// ---------------------------------------------------------------------------
+const buildIceConfig = () => {
+  // Flat STUN URL strings (node-datachannel native format)
+  const stunUrls = process.env.WEBRTC_STUN_URLS
+    ? process.env.WEBRTC_STUN_URLS.split(',').map(s => s.trim()).filter(Boolean)
+    : (!isProduction ? ['stun:stun.l.google.com:19302'] : []);
+
+  // W3C RTCIceServer format (for clients / Flutter app)
+  const iceServersW3C = stunUrls.length > 0
+    ? [{ urls: stunUrls }]
+    : [];
+
+  // node-datachannel flat string format
+  const iceServersFlat = [...stunUrls];
+
+  // TURN server — requires all three env vars (never hardcoded)
+  const turnUrl = process.env.WEBRTC_TURN_URL;
+  const turnUsername = process.env.WEBRTC_TURN_USERNAME;
+  const turnCredential = process.env.WEBRTC_TURN_CREDENTIAL;
+
+  let turnConfig = null;
+  if (turnUrl && turnUsername && turnCredential) {
+    // W3C format for clients
+    iceServersW3C.push({ urls: turnUrl, username: turnUsername, credential: turnCredential });
+    // node-datachannel format (URL only; credentials passed separately)
+    iceServersFlat.push(turnUrl);
+    turnConfig = { url: turnUrl, username: turnUsername, credential: turnCredential };
+  } else if (isProduction && (!turnUrl || !turnUsername || !turnCredential)) {
+    console.warn('[Config] WARNING: TURN server not configured. ICE may fail behind symmetric NAT.');
+  }
+
+  return { iceServersW3C, iceServersFlat, turnConfig };
+};
+
+const _iceConfig = buildIceConfig();
+
 const config = Object.freeze({
   nodeEnv: process.env.NODE_ENV || 'development',
   isProduction,
@@ -43,6 +85,24 @@ const config = Object.freeze({
   },
   mlServiceUrl: process.env.ML_SERVICE_URL || 'http://localhost:5001',
   logLevel: process.env.LOG_LEVEL || (isProduction ? 'info' : 'debug'),
+  webrtc: {
+    // W3C RTCIceServer format (for Flutter clients / browser)
+    iceServers: _iceConfig.iceServersW3C,
+    // Flat string URL array (for node-datachannel PeerConnection)
+    iceServersFlat: _iceConfig.iceServersFlat,
+    // TURN config object (null if not configured)
+    turnConfig: _iceConfig.turnConfig,
+    // Maximum time (ms) to wait for ICE to connect before restart
+    iceConnectionTimeoutMs: parseInt(process.env.WEBRTC_ICE_TIMEOUT_MS || '10000', 10),
+    // Maximum time (ms) to wait for DataChannel to open after ICE connected
+    dcOpenTimeoutMs: parseInt(process.env.WEBRTC_DC_OPEN_TIMEOUT_MS || '10000', 10),
+    // Maximum time (ms) before an idle DataChannel is auto-closed
+    idleTimeoutMs: parseInt(process.env.WEBRTC_IDLE_TIMEOUT_MS || '300000', 10),
+    // Maximum ICE restart attempts before failing the session
+    maxIceRestarts: parseInt(process.env.WEBRTC_MAX_ICE_RESTARTS || '3', 10),
+    // DataChannel message protocol version
+    messageVersion: 1,
+  },
 });
 
 if (!isProduction && config.jwt.secret === 'netshare_dev_secret_change_me') {

@@ -31,17 +31,25 @@
 ---
 
 ## PHASE 2 — Secure Communication/Routing Architecture
-
-| ID | Task | FR/NFR | Files | Effort |
+ 
+| ID | Task | FR/NFR | Files | Status |
 |---|---|---|---|---|
-| ROUTE-00 | Create SECURE_ROUTING_IMPLEMENTATION_PLAN.md | CON-4, OE-5, SI-3, SI-4 | docs/audit/SECURE_ROUTING_IMPLEMENTATION_PLAN.md | 4hrs |
-| ROUTE-01 | Create RoutingSession Mongoose model | Chapter 3 | models/RoutingSession.js | 1hr |
-| ROUTE-02 | Implement session lifecycle (created→negotiating→active→recovering→completed→failed) | SI-3 | services/routingSessionService.js | 4hrs |
-| ROUTE-03 | WebRTC signaling via Socket.IO (offer/answer/ICE) | CON-4, SI-3 | services/webrtcSignalingService.js, socketService.js | 8hrs |
-| ROUTE-04 | Android VpnService platform channel (Flutter POC) | OE-5, SI-4 | Flutter android/app/src/main/java/.../VpnService.java, Flutter platform channel | 12hrs |
-| ROUTE-05 | Connection recovery and failure logging | REL-1, REL-2 | services/routingSessionService.js | 3hrs |
-| ROUTE-06 | Session identity binding (taskId, nodeId, clientId) | SEC-5 | services/routingSessionService.js | 2hrs |
-| ROUTE-07 | Unauthorized target prevention | CON-5, CON-6 | services/routingSessionService.js | 2hrs |
+| ROUTE-00 | Create SECURE_ROUTING_IMPLEMENTATION_PLAN.md | CON-4, OE-5, SI-3, SI-4 | docs/audit/SECURE_ROUTING_IMPLEMENTATION_PLAN.md | [DONE] |
+| ROUTE-01 | Create RoutingSession Mongoose model | Chapter 3 | models/RoutingSession.js | [DONE - Phase 2A] |
+| ROUTE-02 | Implement session lifecycle (created→negotiating→active→recovering→completed→failed) | SI-3 | services/routingSessionService.js | [DONE - Phase 2A] |
+| ROUTE-03 | WebRTC signaling via Socket.IO (offer/answer/ICE) | CON-4, SI-3 | services/webrtcSignalingService.js, socketService.js | [DONE - Phase 2A] |
+| ROUTE-04 | Android VpnService platform channel (Flutter bridge) | OE-5, SI-4 | NetShareVpnService.kt, MainActivity.kt, lib/services/vpn_service.dart | [DONE - Phase 2C] |
+| ROUTE-05 | Connection recovery and failure logging | REL-1, REL-2 | services/routingSessionService.js | [DONE - Phase 2A] |
+| ROUTE-06 | Session identity binding (taskId, nodeId, clientId) | SEC-5 | services/routingSessionService.js | [DONE - Phase 2A] |
+| ROUTE-07 | Unauthorized target prevention | CON-5, CON-6 | services/routingSessionService.js | [DONE - Phase 2A] |
+| ROUTE-08 | Backend WebRTC PeerConnection & DataChannel Manager | Chapter 3, SI-3 | services/webrtcPeerService.js | [DONE - Phase 2B] |
+| ROUTE-09 | Versioned DataChannel message protocol & deduplication | Chapter 3, SI-3 | services/webrtcPeerService.js | [DONE - Phase 2B] |
+| ROUTE-10 | Environment STUN/TURN configuration & credential safety | Chapter 3, SEC-2 | config/env.js | [DONE - Phase 2B] |
+| ROUTE-11 | Connection/Open/Idle timeouts & ICE restart signaling | Chapter 3, REL-1 | services/webrtcPeerService.js, webrtcSignalingService.js | [DONE - Phase 2B] |
+| ROUTE-12 | Loop-safe Android VpnService TUN forwarding & socket protect | OE-5, SI-4 | NetShareVpnService.kt, MainActivity.kt, vpn_service.dart | [DONE - Phase 2D] |
+| ROUTE-13 | Target authorization, SSRF, RFC1918, metadata & redirect guards | CON-4, CON-5, SEC-1 | services/targetValidationService.js, secureTaskExecutor.js, task_executor_service.dart | [DONE - Phase 2D] |
+| ROUTE-14 | End-to-end task routing coordinator & exactly-once settlement | Chapter 3, SI-3 | services/secureTaskRoutingService.js, tests/phase2d.test.js | [DONE - Phase 2D] |
+| ROUTE-15 | Real Android physical/emulator device E2E task execution | OE-5, SI-4 | Android emulator/device | [BLOCKED - No device/AVD] |
 
 ---
 

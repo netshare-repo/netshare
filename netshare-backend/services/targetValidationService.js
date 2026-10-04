@@ -60,14 +60,18 @@ const isBlockedIPv6 = (ip) => {
          normalized.startsWith('::ffff:172.');
 };
 
+const ALLOWED_DEFAULT_PORTS = [80, 443, 8080, 8443];
+
 /**
  * Validates a target URL for safe HTTP testing execution.
- * Blocks SSRF, private networks, non-HTTP protocols, etc.
+ * Blocks SSRF, private networks, non-HTTP protocols, unauthorized ports, etc.
  * 
  * @param {string} targetUrl - The URL to validate
- * @returns {{ valid: boolean, reason?: string, resolvedIp?: string }}
+ * @param {object} [options] - Optional custom options
+ * @param {number[]} [options.allowedPorts] - Explicitly allowed ports
+ * @returns {Promise<{ valid: boolean, reason?: string, resolvedIp?: string }>}
  */
-export const validateTarget = async (targetUrl) => {
+export const validateTarget = async (targetUrl, options = {}) => {
   // 1. Parse URL
   let parsed;
   try {
@@ -80,8 +84,20 @@ export const validateTarget = async (targetUrl) => {
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     return { valid: false, reason: `Unsupported protocol: ${parsed.protocol}. Only HTTP and HTTPS are permitted.` };
   }
+
+  // 3. Port check — prevent port scanning / arbitrary service abuse
+  const defaultPort = parsed.protocol === 'https:' ? 443 : 80;
+  const targetPort = parsed.port ? parseInt(parsed.port, 10) : defaultPort;
+  const allowedPorts = options.allowedPorts || ALLOWED_DEFAULT_PORTS;
+
+  if (isNaN(targetPort) || !allowedPorts.includes(targetPort)) {
+    return {
+      valid: false,
+      reason: `Unauthorized port: ${parsed.port || targetPort}. Only authorized HTTP/HTTPS ports (${allowedPorts.join(', ')}) are permitted.`,
+    };
+  }
   
-  // 3. Hostname checks
+  // 4. Hostname checks
   const hostname = parsed.hostname.toLowerCase();
   
   if (BLOCKED_HOSTNAMES.includes(hostname)) {
@@ -92,7 +108,7 @@ export const validateTarget = async (targetUrl) => {
     return { valid: false, reason: 'Blocked IP address. Cloud metadata and loopback addresses are not permitted.' };
   }
   
-  // 4. Check if hostname is a raw IP
+  // 5. Check if hostname is a raw IP
   if (net.isIPv4(hostname)) {
     if (isPrivateIPv4(hostname)) {
       return { valid: false, reason: 'Private/reserved IPv4 address. RFC1918 and loopback ranges are blocked.' };
@@ -107,7 +123,7 @@ export const validateTarget = async (targetUrl) => {
     return { valid: true, resolvedIp: hostname };
   }
   
-  // 5. DNS resolution — resolve hostname and validate resolved IP
+  // 6. DNS resolution — resolve hostname and validate resolved IP
   try {
     const addresses = await dns.resolve4(hostname);
     if (!addresses || addresses.length === 0) {
@@ -133,4 +149,103 @@ export const validateTarget = async (targetUrl) => {
   }
 };
 
-export default { validateTarget };
+/**
+ * Validates an HTTP redirect target before following.
+ * Protects against SSRF through unsafe redirects (e.g. 302 -> 169.254.169.254 or localhost).
+ *
+ * @param {string} originalUrl - The base request URL
+ * @param {string} redirectLocation - The Location header value
+ * @param {object} [options]
+ * @returns {Promise<{ valid: boolean, resolvedUrl?: string, reason?: string }>}
+ */
+export const validateRedirect = async (originalUrl, redirectLocation, options = {}) => {
+  if (!redirectLocation) {
+    return { valid: false, reason: 'Empty redirect location.' };
+  }
+
+  let resolvedRedirect;
+  try {
+    resolvedRedirect = new URL(redirectLocation, originalUrl).toString();
+  } catch {
+    return { valid: false, reason: 'Invalid redirect URL format.' };
+  }
+
+  const validation = await validateTarget(resolvedRedirect, options);
+  if (!validation.valid) {
+    return {
+      valid: false,
+      reason: `Unsafe redirect blocked: ${validation.reason}`,
+      resolvedUrl: resolvedRedirect,
+    };
+  }
+
+  return {
+    valid: true,
+    resolvedUrl: resolvedRedirect,
+    resolvedIp: validation.resolvedIp,
+  };
+};
+
+/**
+ * Node-side target enforcement: ensures execution target strictly matches
+ * the task-authorized target parameters and security policies.
+ *
+ * @param {object} params
+ * @param {string} params.targetUrl
+ * @param {string} [params.authorizedHost]
+ * @param {number} [params.authorizedPort]
+ * @param {string} [params.authorizedMethod]
+ * @returns {Promise<{ valid: boolean, reason?: string }>}
+ */
+export const validateTaskExecutionTarget = async ({
+  targetUrl,
+  authorizedHost,
+  authorizedPort,
+  authorizedMethod = 'GET',
+}) => {
+  let parsed;
+  try {
+    parsed = new URL(targetUrl);
+  } catch {
+    return { valid: false, reason: 'Malformed target URL' };
+  }
+
+  // 1. Method check: only GET or HEAD allowed for network testing
+  const normalizedMethod = (authorizedMethod || 'GET').toUpperCase();
+  if (!['GET', 'HEAD'].includes(normalizedMethod)) {
+    return { valid: false, reason: `Unauthorized HTTP method '${authorizedMethod}'. Only GET/HEAD allowed.` };
+  }
+
+  // 2. Host check: must strictly match authorizedHost if provided
+  if (authorizedHost && parsed.hostname.toLowerCase() !== authorizedHost.toLowerCase()) {
+    return {
+      valid: false,
+      reason: `Target host '${parsed.hostname}' does not match authorized host '${authorizedHost}'`,
+    };
+  }
+
+  // 3. Port check: must match authorizedPort if provided
+  const defaultPort = parsed.protocol === 'https:' ? 443 : 80;
+  const currentPort = parsed.port ? parseInt(parsed.port, 10) : defaultPort;
+  if (authorizedPort && currentPort !== authorizedPort) {
+    return {
+      valid: false,
+      reason: `Target port ${currentPort} does not match authorized port ${authorizedPort}`,
+    };
+  }
+
+  // 4. Run general safety validation
+  const targetCheck = await validateTarget(targetUrl, {
+    allowedPorts: authorizedPort ? [authorizedPort] : ALLOWED_DEFAULT_PORTS,
+  });
+
+  return targetCheck;
+};
+
+export default {
+  validateTarget,
+  validateRedirect,
+  validateTaskExecutionTarget,
+  ALLOWED_DEFAULT_PORTS,
+};
+

@@ -400,8 +400,10 @@ describe('Phase 1: Simulated Content Removed', () => {
   
   it('T21: TaskSession model defaults simulatedSecureChannel to false', async () => {
     const TaskSession = (await import('../models/TaskSession.js')).default;
+    // Phase 2A removed simulatedSecureChannel from the schema.
+    // Verify it is no longer a schema path (field fully retired).
     const schema = TaskSession.schema.paths.simulatedSecureChannel;
-    expect(schema.defaultValue).toBe(false);
+    expect(schema).toBeUndefined();
   });
   
   it('T22: sessionController does not contain simulated text', async () => {

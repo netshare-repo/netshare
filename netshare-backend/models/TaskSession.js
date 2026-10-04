@@ -31,12 +31,10 @@ const taskSessionSchema = new mongoose.Schema(
       default: "created",
     },
 
-    // DEPRECATED: Will be removed in Phase 2 when real secure routing is implemented.
-    // Kept for backward compatibility with existing records.
-    simulatedSecureChannel: {
-      type: Boolean,
-      default: false,
-    },
+    // REMOVED: simulatedSecureChannel was a placeholder for real routing.
+    // Phase 2A introduces RoutingSession for real secure session tracking.
+    // Field intentionally absent from schema; existing DB records retain it
+    // but it is never read or written by application code.
 
     bandwidthUsedMB: {
       type: Number,

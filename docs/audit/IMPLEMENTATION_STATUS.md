@@ -1,5 +1,5 @@
 # NetShare — Implementation Status
-> Generated: 2026-09-26 | Master status register of all modules and features
+> Generated: 2026-09-26 | Updated: 2026-10-05 | Master status register of all modules and features
 
 ---
 
@@ -18,6 +18,62 @@
 - **Modified files**: server.js (Helmet, CORS, request IDs, health routes, graceful shutdown, structured logging), authController.js (removed admin role, added email OTP), walletService.js (MongoDB transactions, idempotency), authMiddleware.js (config-based), errorMiddleware.js (centralized error handling), config/db.js (logger integration), generateToken.js (config-based), nodeController.js (removed fake latency), User model (OTP tracking fields), CreditTransaction model (idempotencyKey), Register.jsx (removed admin option), docker-compose.yml (removed hardcoded secrets), authRoutes.js (OTP protection middleware), socketService.js (CORS restriction)
 - **Backend file count**: was 35 source files, now 48 source files (13 new)
 - **Documentation added**: 5 ops/security docs, 1 baseline doc
+
+---
+
+## Phase 1 Production Hardening (COMPLETE)
+- **Phase 1 is COMPLETE — 49/49 tests passing**
+- **Bugs fixed**: stopParticipation crash (req.body?.reason), draining→inactive transition, ParticipationSession.stopReason enum, health model weights, test expectation corrections, hardcoded fake latency defaults
+- **New files**: docs/architecture/TELEMETRY_CONTRACT.md, BANDWIDTH_ACCOUNTING.md, SPEED_CAP_DESIGN.md, NODE_HEALTH_MODEL.md, NODE_LIFECYCLE.md
+- **Modified**: nodeController.js, nodeHealth.js, NodeDevice.js, ParticipationSession.js, tests/phase0.test.js, tests/phase1.test.js, vitest.config.js
+
+---
+
+## Phase 2A Secure Routing Foundation (COMPLETE)
+- **Phase 2A is COMPLETE — 30/30 new tests passing (79/79 total)**
+- **New files**: models/RoutingSession.js, services/routingSessionService.js, services/webrtcSignalingService.js, tests/phase2a.test.js
+- **Modified**: services/socketService.js (signaling registration, cleanup timer), models/TaskSession.js (simulatedSecureChannel removed)
+- **RoutingSession states**: created → negotiating → active → recovering → completed/failed/expired
+- **WebRTC signaling events**: webrtc:offer, webrtc:answer, webrtc:ice_candidate, webrtc:close
+- **Security**: identity binding (taskId+nodeId+clientId), SHA-256 token hash, timing-safe comparison, token rotation on transitions, stale session cleanup
+- **simulatedSecureChannel**: fully removed from TaskSession schema
+
+---
+
+## Phase 2B Real WebRTC Data Channel (COMPLETE)
+- **Phase 2B is COMPLETE — 35/35 new tests passing (114/114 total across all phases)**
+- **WebRTC Stack**: Integrated `node-datachannel` with W3C `RTCPeerConnection` polyfill compatibility layer for backend peer operations and integration testing.
+- **New files**: `services/webrtcPeerService.js`, `tests/phase2b.test.js`
+- **Modified files**:
+  - `config/env.js`: Environment-based STUN (`WEBRTC_STUN_URLS`) and TURN (`WEBRTC_TURN_URL`, `WEBRTC_TURN_USERNAME`, `WEBRTC_TURN_CREDENTIAL`) configuration. Never hardcoded credentials. Development fallback to public Google STUN. Configurable timeouts (`WEBRTC_ICE_TIMEOUT_MS`, `WEBRTC_DC_OPEN_TIMEOUT_MS`, `WEBRTC_IDLE_TIMEOUT_MS`, `WEBRTC_MAX_ICE_RESTARTS`).
+  - `services/webrtcSignalingService.js`: Multi-step token refresh rotation (`webrtc:token_refresh`), ICE restart coordination (`webrtc:ice_restart`), and controlled DataChannel signaling relays (`webrtc:dc_message`).
+  - `models/RoutingSession.js`: Added diagnostic fields (`iceRestartCount`, `dcOpenedAt`, `dcMessageCount`) and timeout reason enums (`ice_restart_timeout`, `dc_open_timeout`, `idle_timeout`).
+  - `services/routingSessionService.js`: Added `recordDcOpen`, `recordDcMessages`, and integrated `iceRestartCount` increments into recovery flows.
+- **Protocol Envelope (Version 1)**: Reliable, ordered DataChannel messages with schema: `{ v: 1, sessionId, type, msgId, payload, sentAt }`, deduplication/idempotency tracking, and ping→pong keepalive.
+- **Security & Privacy**: Zero persistence of raw SDP, ICE credentials, or TURN passwords. Strict sessionId binding verification. Loopback test isolation.
+
+---
+
+## Phase 2D Real Controlled Task Routing (CODE COMPLETE — ANDROID E2E BLOCKED)
+- **Phase 2D Backend & Node Implementation**: COMPLETE (126/126 backend tests passing across 5 test suites; 10/10 Flutter tests passing; Dart analyze clean with 0 errors/warnings; Android Gradle `compileDebugKotlin` BUILD SUCCESSFUL).
+- **Loop-Safe Forwarding Architecture**:
+  - Removed flawed `builder.addDisallowedApplication(packageName)` from `NetShareVpnService.kt`.
+  - Replaced with standard Android loop-safe `protect(socket)` / `protect(fd)` so outbound residential target connections bypass the tunnel without causing routing loops, while task traffic enters and traverses the controlled TUN interface.
+  - Active native `TunForwarderThread` reads raw IP packets from TUN descriptor (`FileInputStream`), handles ICMP ping probes with checksum recalculation, drops arbitrary unauthorized traffic, and tracks live throughput metrics (`packetsIn`, `bytesIn`, `packetsOut`, `bytesOut`).
+- **Target Authorization & SSRF Filtering**:
+  - Backend (`targetValidationService.js`) and Node Agent (`secureTaskExecutor.js`) + Flutter (`task_executor_service.dart`) independently enforce:
+    - Target host must match task's `authorizedHost`.
+    - Target port must match task's `authorizedPort` (strict web ports only: 80, 443, 8080, 8443; non-standard ports like 22, 25, 6379, 3306 are blocked).
+    - Method strictly restricted to GET/HEAD.
+    - Anti-SSRF: blocks loopback (`127.0.0.0/8`, `::1`), RFC1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), and cloud metadata IPs (`169.254.169.254`, `metadata.google.internal`).
+    - Unsafe HTTP redirects are inspected; redirects pointing to private, metadata, or unauthorized ports are rejected rather than followed.
+- **Controlled End-to-End Routing Service**:
+  - Created `services/secureTaskRoutingService.js`: binds `TestingTask` → `RoutingSession` → WebRTC DataChannel message (`task_request`) → Residential Execution → `task_result`.
+  - Idempotent Settlement: `settleTaskResult()` guarantees exactly-once `TaskResult` storage and dynamic wallet credit settlement (idempotency key + status checks + concurrency lock).
+  - Lifecycle: transitions `RoutingSession` cleanly through `created` → `negotiating` → `active` → `completed` (or `failed`) and releases WebRTC peer connection resources.
+- **Android E2E Emulator/Device Test Status**: **BLOCKED**
+  - Host environment has no physical Android device connected (`adb devices` list is empty) and no Android emulator AVDs configured (`emulator -list-avds` returns empty).
+  - In strict compliance with instructions, real Android execution is reported as **BLOCKED** rather than claiming Phase 2 complete.
 
 ---
 
@@ -240,7 +296,7 @@
 | Flutter mobile app | 🟡 PARTIAL | Node participant only; no client UI |
 | Desktop node agent | 🟢 DONE | Real HTTP test execution |
 | ML service (Python Flask) | 🟡 PARTIAL | Deployed; NOT integrated into allocation flow |
-| WebRTC secure routing | 🔴 NOT_STARTED | 0 lines of WebRTC code |
+| WebRTC secure routing | 🟡 PARTIAL | Backend signaling foundation done (Phase 2A); Android VpnService is Phase 2B |
 | AnomalyAlert system | 🟡 PARTIAL | Models exist but functionality not complete |
 | Notification system | 🟡 PARTIAL | Models exist but functionality not complete |
 | Email service | 🟢 DONE | Nodemailer OTP delivery (Phase 0); SMTP in prod, console in dev |
@@ -261,7 +317,7 @@ This counts ONLY the 64 official functional requirements from the SRS.
 | BROKEN | 0 |
 | **TOTAL** | **64** |
 
-**Official FR completion: 29/64 = 45.3%**
+**Official FR completion: 29/64 = 45.3%** (unchanged — Phase 2A is infrastructure, no new SRS FRs completed)
 
 ### Broader Implementation Inventory (FRs + Infrastructure)
 

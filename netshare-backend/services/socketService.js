@@ -12,6 +12,8 @@ import ParticipationSession from "../models/ParticipationSession.js";
 import { calculateReward } from "./rewardService.js";
 import { addCredits } from "./walletService.js";
 import logger from '../lib/logger.js';
+import { registerSignalingHandlers } from './webrtcSignalingService.js';
+import { startSessionCleanup } from './routingSessionService.js';
 
 // In-memory tracking of active node connections: Map<nodeIdString, { socketId, socket, node, connectedAt, lastHeartbeatAt }>
 const connectedNodes = new Map();
@@ -629,6 +631,9 @@ export const initSocketServer = async (httpServer) => {
       socket.on("task_completed", async (data) => {
         await handleTaskCompleted(socket, data);
       });
+
+      // WebRTC signaling events for this node socket
+      registerSignalingHandlers(io, socket);
     }
 
     // 2. Admin connection
@@ -645,6 +650,9 @@ export const initSocketServer = async (httpServer) => {
       const clientRoom = `client_${socket.user._id}`;
       socket.join(clientRoom);
       socketRegistry.set(socket.id, { type: "client", id: socket.user._id.toString(), user: socket.user });
+
+      // WebRTC signaling events for this client socket
+      registerSignalingHandlers(io, socket);
     }
 
     // Common disconnect handler
@@ -654,6 +662,7 @@ export const initSocketServer = async (httpServer) => {
   });
 
   startHeartbeatEvictionMonitor();
+  startSessionCleanup();
 
   return io;
 };
