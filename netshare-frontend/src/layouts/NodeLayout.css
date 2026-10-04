@@ -1,0 +1,251 @@
+.node-layout {
+  min-height: 100vh;
+  display: flex;
+  background: #0b0f19;
+  color: #f8fafc;
+  font-family: inherit;
+}
+
+.node-sidebar {
+  width: 280px;
+  min-height: 100vh;
+  background: #111827;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 100;
+}
+
+.node-logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 34px;
+}
+
+.node-logo-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #10b981, #06b6d4);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25);
+}
+
+.node-logo h2 {
+  font-size: 22px;
+  color: #f8fafc;
+  margin: 0;
+  font-weight: 700;
+}
+
+.node-logo p {
+  font-size: 13px;
+  color: #94a3b8;
+  margin: 2px 0 0;
+}
+
+.node-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.node-nav a {
+  height: 46px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 10px;
+  color: #94a3b8;
+  font-weight: 500;
+  font-size: 14px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.node-nav a:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #f8fafc;
+}
+
+.node-nav a.active {
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.15), rgba(6, 182, 212, 0.08));
+  color: #34d399;
+  border-left: 3px solid #10b981;
+}
+
+.node-sidebar-card {
+  background: rgba(16, 185, 129, 0.06);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.sidebar-card-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.node-sidebar-card h4 {
+  color: #f8fafc;
+  font-size: 14px;
+  margin: 0 0 6px;
+}
+
+.node-sidebar-card p {
+  color: #94a3b8;
+  font-size: 12px;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.node-logout-btn {
+  height: 44px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.node-logout-btn:hover {
+  background: #ef4444;
+  color: white;
+}
+
+.node-main {
+  margin-left: 280px;
+  flex: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.node-topbar {
+  height: 80px;
+  background: #111827;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 90;
+}
+
+.node-topbar-left h3 {
+  font-size: 18px;
+  color: #f8fafc;
+  margin: 0;
+  font-weight: 600;
+}
+
+.node-topbar-left p {
+  font-size: 13px;
+  color: #94a3b8;
+  margin: 3px 0 0;
+}
+
+.node-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.node-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.node-device-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.node-user-pill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.node-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.node-user-info h5 {
+  font-size: 13px;
+  color: #f8fafc;
+  margin: 0;
+  font-weight: 600;
+}
+
+.node-user-info span {
+  font-size: 11px;
+  color: #94a3b8;
+  text-transform: capitalize;
+}
+
+.node-content {
+  padding: 32px;
+  flex: 1;
+}
+
+@media (max-width: 900px) {
+  .node-sidebar {
+    width: 220px;
+  }
+  .node-main {
+    margin-left: 220px;
+  }
+  .node-content {
+    padding: 20px;
+  }
+}

@@ -1,0 +1,195 @@
+.manage-users-page {
+  padding: 20px;
+}
+
+.mu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.mu-header h2 {
+  color: white;
+  margin: 0;
+}
+
+.mu-header p {
+  color: #94a3b8;
+  margin: 5px 0 0 0;
+  font-size: 0.9rem;
+}
+
+.mu-header button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.mu-filters {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.mu-search-form {
+  display: flex;
+  align-items: center;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 0 10px;
+  flex: 1;
+  min-width: 250px;
+}
+
+.mu-search-form input {
+  background: transparent;
+  border: none;
+  color: white;
+  padding: 10px;
+  flex: 1;
+  outline: none;
+}
+
+.mu-search-form button {
+  background: var(--primary-color, #38bdf8);
+  border: none;
+  color: #0f172a;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.mu-filters select {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: white;
+  padding: 10px;
+  border-radius: 6px;
+  outline: none;
+}
+
+.mu-message {
+  padding: 10px;
+  background: rgba(56, 189, 248, 0.1);
+  color: #38bdf8;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.mu-empty {
+  text-align: center;
+  padding: 40px;
+  background: #1e293b;
+  border-radius: 8px;
+  color: #94a3b8;
+}
+
+.mu-table-wrap {
+  background: #1e293b;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.mu-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.mu-table th, .mu-table td {
+  padding: 15px;
+  text-align: left;
+  border-bottom: 1px solid #334155;
+}
+
+.mu-table th {
+  color: #94a3b8;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.mu-table td {
+  color: white;
+}
+
+.mu-user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.mu-user-info strong {
+  font-size: 1rem;
+}
+
+.mu-user-info span {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.mu-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  text-transform: capitalize;
+}
+
+.mu-badge.status-active {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.mu-badge.status-blocked {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.mu-badge.role-admin {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.mu-badge.role-platform_client {
+  background: rgba(56, 189, 248, 0.1);
+  color: #38bdf8;
+}
+
+.mu-badge.role-node_participant {
+  background: rgba(168, 85, 247, 0.1);
+  color: #a855f7;
+}
+
+.mu-badge.role-both {
+  background: rgba(236, 72, 153, 0.1);
+  color: #ec4899;
+}
+
+.mu-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: #334155;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.mu-action-btn:hover {
+  background: #475569;
+}
+
+.mu-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

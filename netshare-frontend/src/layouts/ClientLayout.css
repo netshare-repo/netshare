@@ -1,0 +1,384 @@
+.client-layout {
+  min-height: 100vh;
+  display: flex;
+  background: #f8fafc;
+}
+
+.client-sidebar {
+  width: 280px;
+  min-height: 100vh;
+  background: #ffffff;
+  border-right: 1px solid #e2e8f0;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  left: 0;
+  top: 0;
+}
+
+.client-logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 34px;
+}
+
+.client-logo-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #2563eb, #06b6d4);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 14px 30px rgba(37, 99, 235, 0.22);
+}
+
+.client-logo h2 {
+  font-size: 22px;
+  color: #0f172a;
+}
+
+.client-logo p {
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.client-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.client-nav a {
+  height: 48px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 14px;
+  color: #64748b;
+  font-weight: 700;
+  transition: 0.2s ease;
+}
+
+.client-nav a:hover {
+  background: #f1f5f9;
+  color: #2563eb;
+}
+
+.client-nav a.active {
+  background: linear-gradient(135deg, #eff6ff, #ecfeff);
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.client-sidebar-card {
+  margin-top: auto;
+  padding: 18px;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(6, 182, 212, 0.15), transparent 35%),
+    linear-gradient(135deg, #eff6ff, #ffffff);
+  border: 1px solid #dbeafe;
+}
+
+.client-sidebar-card h4 {
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.client-sidebar-card p {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.client-logout-btn {
+  margin-top: 18px;
+  height: 46px;
+  border: none;
+  border-radius: 14px;
+  background: #fef2f2;
+  color: #dc2626;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.client-main {
+  flex: 1;
+  margin-left: 280px;
+  min-height: 100vh;
+}
+
+.client-topbar {
+  height: 86px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.client-topbar h3 {
+  color: #0f172a;
+  font-size: 22px;
+}
+
+.client-topbar p {
+  color: #64748b;
+  font-size: 14px;
+  margin-top: 3px;
+}
+
+.client-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.client-bell {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 14px;
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.client-user-pill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px 8px 8px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 999px;
+}
+
+.client-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb, #06b6d4);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.client-user-pill h5 {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.client-user-pill span {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.client-content {
+  padding: 34px;
+}
+/* ============================= */
+/* Responsive Client Layout */
+/* ============================= */
+
+/* Laptop */
+@media (max-width: 1200px) {
+  .client-sidebar {
+    width: 250px;
+    padding: 20px;
+  }
+
+  .client-main {
+    margin-left: 250px;
+  }
+
+  .client-content {
+    padding: 26px;
+  }
+}
+
+/* Tablet + Mobile */
+@media (max-width: 900px) {
+  .client-layout {
+    display: block;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  .client-sidebar {
+    position: relative;
+    width: 100%;
+    min-height: auto;
+    padding: 16px;
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .client-logo {
+    margin-bottom: 16px;
+  }
+
+  .client-nav {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    overflow: visible;
+    width: 100%;
+  }
+
+  .client-nav a {
+    width: 100%;
+    min-width: 0;
+    height: 44px;
+    padding: 0 12px;
+    justify-content: flex-start;
+    font-size: 13px;
+  }
+
+  .client-sidebar-card {
+    display: none;
+  }
+
+  .client-logout-btn {
+    width: 100%;
+    margin-top: 14px;
+  }
+
+  .client-main {
+    margin-left: 0;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  .client-topbar {
+    height: auto;
+    min-height: auto;
+    padding: 16px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .client-topbar-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .client-content {
+    width: 100%;
+    padding: 16px;
+    overflow-x: hidden;
+  }
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .client-sidebar {
+    padding: 14px;
+  }
+
+  .client-logo-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+  }
+
+  .client-logo h2 {
+    font-size: 20px;
+  }
+
+  .client-logo p {
+    font-size: 11px;
+  }
+
+  .client-nav {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .client-nav a {
+    height: 42px;
+    font-size: 12px;
+    padding: 0 10px;
+    gap: 8px;
+  }
+
+  .client-nav a svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .client-logout-btn {
+    height: 42px;
+    font-size: 13px;
+  }
+
+  .client-topbar h3 {
+    font-size: 18px;
+    line-height: 1.3;
+  }
+
+  .client-topbar p {
+    font-size: 12px;
+  }
+
+  .client-bell {
+    width: 40px;
+    height: 40px;
+  }
+
+  .client-user-pill {
+    max-width: calc(100% - 52px);
+    padding: 7px 10px 7px 7px;
+  }
+
+  .client-user-pill h5 {
+    font-size: 11px;
+    max-width: 110px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .client-user-pill span {
+    font-size: 10px;
+  }
+
+  .client-avatar {
+    width: 34px;
+    height: 34px;
+  }
+
+  .client-content {
+    padding: 14px;
+  }
+}
+
+/* Very small phones */
+@media (max-width: 380px) {
+  .client-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .client-user-pill div:last-child {
+    display: none;
+  }
+}

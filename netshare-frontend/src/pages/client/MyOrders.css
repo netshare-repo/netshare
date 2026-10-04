@@ -1,0 +1,156 @@
+.orders-page {
+  width: 100%;
+}
+
+.orders-header {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 22px;
+  padding: 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.orders-header h2 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.orders-header p {
+  margin: 7px 0 0;
+  color: #64748b;
+}
+
+.orders-header button {
+  border: none;
+  background: #2563eb;
+  color: white;
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.orders-empty {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 22px;
+  padding: 36px;
+  text-align: center;
+  color: #64748b;
+}
+
+.orders-empty h3 {
+  color: #0f172a;
+}
+
+.orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.order-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 22px;
+  padding: 18px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+}
+
+.order-left {
+  display: flex;
+  gap: 14px;
+}
+
+.order-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 17px;
+  background: #eff6ff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.order-card h3 {
+  margin: 0 0 7px;
+  color: #0f172a;
+}
+
+.order-card p {
+  margin: 4px 0;
+  color: #64748b;
+}
+
+.order-card p span {
+  color: #334155;
+  font-weight: 700;
+}
+
+.order-right {
+  text-align: right;
+  min-width: 150px;
+}
+
+.order-status {
+  display: inline-block;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  text-transform: uppercase;
+  font-weight: 900;
+}
+
+.order-status.pending {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.order-status.fulfilled {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.order-status.rejected,
+.order-status.cancelled {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.order-credits {
+  margin-top: 12px;
+  color: #16a34a;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+@media (max-width: 700px) {
+  .orders-header,
+  .order-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .order-right {
+    text-align: left;
+  }
+
+  .order-credits {
+    justify-content: flex-start;
+  }
+}

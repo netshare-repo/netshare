@@ -1,0 +1,180 @@
+.admin-market-products {
+  width: 100%;
+}
+
+.amp-header {
+  background: linear-gradient(135deg, #0f172a, #2563eb);
+  color: white;
+  padding: 26px;
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.amp-header h2 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.amp-header p {
+  margin: 8px 0 0;
+  color: #dbeafe;
+}
+
+.amp-header button,
+.amp-actions button,
+.amp-card button {
+  border: none;
+  background: #2563eb;
+  color: white;
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.amp-header button {
+  background: white;
+  color: #2563eb;
+}
+
+.amp-message {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  padding: 14px;
+  border-radius: 16px;
+  font-weight: 800;
+  margin-bottom: 18px;
+}
+
+.amp-form {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 22px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.amp-form h3 {
+  margin: 0 0 16px;
+  font-size: 22px;
+  color: #0f172a;
+}
+
+.amp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.amp-form input,
+.amp-form select,
+.amp-form textarea {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 13px 14px;
+  outline: none;
+  font-weight: 600;
+}
+
+.amp-form textarea {
+  margin-top: 14px;
+  min-height: 95px;
+  resize: vertical;
+}
+
+.amp-actions {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+}
+
+.amp-actions .amp-cancel {
+  background: #64748b;
+}
+
+.amp-empty {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 22px;
+  padding: 32px;
+  text-align: center;
+  color: #64748b;
+}
+
+.amp-product-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.amp-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 22px;
+  padding: 18px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.amp-card-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: #eff6ff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.amp-card h3 {
+  margin: 0 0 8px;
+  color: #0f172a;
+}
+
+.amp-card p {
+  color: #64748b;
+  line-height: 1.5;
+  min-height: 66px;
+}
+
+.amp-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 14px 0;
+}
+
+.amp-meta span {
+  font-weight: 800;
+  color: #334155;
+}
+
+@media (max-width: 1100px) {
+  .amp-grid,
+  .amp-product-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .amp-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .amp-grid,
+  .amp-product-grid {
+    grid-template-columns: 1fr;
+  }
+}

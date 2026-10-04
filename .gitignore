@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Build output
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker volumes
+mongo_data/
+redis_data/
+
+# Coverage
+coverage/
+
+# ML model artifacts
+ml-service/__pycache__/
+ml-service/*.pyc
+
+# Uploads
+uploads/

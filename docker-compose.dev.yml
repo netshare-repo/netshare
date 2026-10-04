@@ -1,0 +1,39 @@
+services:
+  mongo:
+    image: mongo:7.0
+    container_name: netshare-mongo-dev
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_dev_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    container_name: netshare-redis-dev
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ./netshare-backend
+      dockerfile: Dockerfile
+    container_name: netshare-backend-dev
+    command: npm run dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./netshare-backend:/app
+      - /app/node_modules
+    environment:
+      - PORT=8000
+      - MONGO_URI=mongodb://mongo:27017/netshare_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=netshare_phase_one_secret
+      - NODE_ENV=development
+    depends_on:
+      - mongo
+      - redis
+
+volumes:
+  mongo_dev_data:

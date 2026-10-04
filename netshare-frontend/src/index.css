@@ -1,0 +1,117 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: Inter, system-ui, Arial, sans-serif;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+img,
+svg,
+video {
+  max-width: 100%;
+}
+
+/* ============================= */
+/* Common Responsive Table Style */
+/* ============================= */
+
+.table-responsive {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-responsive table {
+  width: 100%;
+  min-width: 720px;
+}
+
+/* Optional: nicer mobile table scrollbar */
+.table-responsive::-webkit-scrollbar {
+  height: 6px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 999px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+/* ============================= */
+/* Global Responsive Breakpoints */
+/* ============================= */
+
+/* Large desktop */
+@media (min-width: 1400px) {
+  body {
+    font-size: 16px;
+  }
+}
+
+/* Laptop / small desktop */
+@media (max-width: 1200px) {
+  body {
+    font-size: 15px;
+  }
+}
+
+/* Tablet */
+@media (max-width: 900px) {
+  body {
+    font-size: 14px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  body {
+    font-size: 14px;
+  }
+
+  input,
+  select,
+  button {
+    font-size: 14px;
+  }
+
+  .table-responsive table {
+    min-width: 680px;
+  }
+}
+
+/* Very small phones */
+@media (max-width: 380px) {
+  .table-responsive table {
+    min-width: 640px;
+  }
+}

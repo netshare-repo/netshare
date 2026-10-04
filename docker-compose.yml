@@ -1,0 +1,105 @@
+services:
+  # 1. MongoDB Database
+  mongo:
+    image: mongo:7.0
+    container_name: netshare-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - netshare-network
+
+  # 2. Redis Message Broker & Task Queue
+  redis:
+    image: redis:7-alpine
+    container_name: netshare-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - netshare-network
+
+  # 3. Python ML Ranking Service
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: netshare-ml
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+    networks:
+      - netshare-network
+
+  # 4. NetShare Backend (Control Plane & Real-Time Socket Server)
+  backend:
+    build:
+      context: ./netshare-backend
+      dockerfile: Dockerfile
+    container_name: netshare-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - MONGO_URI=mongodb://mongo:27017/netshare_db?replicaSet=rs0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
+      - NODE_ENV=production
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-noreply@netshare.io}
+    depends_on:
+      - mongo
+      - redis
+      - ml-service
+    networks:
+      - netshare-network
+
+  # 5. Headless NetShare Node Execution Agent (Worker)
+  node-agent:
+    build:
+      context: ./netshare-agent
+      dockerfile: Dockerfile
+    container_name: netshare-agent-1
+    restart: unless-stopped
+    environment:
+      - NETSHARE_SERVER_URL=http://backend:8000
+      - NODE_API_KEY=${NODE_API_KEY:?NODE_API_KEY must be set}
+    depends_on:
+      - backend
+    networks:
+      - netshare-network
+
+  # 6. React Web Client Frontend
+  frontend:
+    build:
+      context: ./netshare-frontend
+      dockerfile: Dockerfile
+    container_name: netshare-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - netshare-network
+
+networks:
+  netshare-network:
+    driver: bridge
+
+volumes:
+  mongo_data:
+  redis_data:
