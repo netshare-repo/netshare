@@ -34,7 +34,7 @@ const participationSessionSchema = new mongoose.Schema(
     },
     stopReason: {
       type: String,
-      enum: ['user_requested', 'drain_timeout', 'disconnect', 'unhealthy', 'bandwidth_exhausted', 'admin'],
+      enum: ['user_requested', 'drain_completed', 'drain_timeout', 'disconnect', 'unhealthy', 'bandwidth_exhausted', 'admin'],
       default: null,
     },
 
@@ -71,7 +71,7 @@ const participationSessionSchema = new mongoose.Schema(
 
     latency: {
       type: Number,
-      default: 45,
+      default: null,
     },
 
     packetLoss: {

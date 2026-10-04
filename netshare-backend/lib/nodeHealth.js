@@ -19,9 +19,9 @@ import logger from './logger.js';
 export const HEALTH_CONFIG = Object.freeze({
   VERSION: 1,
   WEIGHTS: {
-    heartbeatFreshness: 0.25,
-    taskSuccessRate: 0.25,
-    failureRate: 0.15,
+    heartbeatFreshness: 0.45,
+    taskSuccessRate: 0.15,
+    failureRate: 0.05,
     latency: 0.15,
     bandwidthRemaining: 0.10,
     taskSaturation: 0.10,

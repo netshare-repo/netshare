@@ -301,6 +301,52 @@ export const stopParticipation = async (req, res) => {
       return res.json({ message: "Node is already inactive", node });
     }
 
+    // If draining and tasks completed, finish the drain
+    if (node.status === 'draining') {
+      const activeTasks = node.currentActiveTasks || 0;
+      if (activeTasks === 0) {
+        node.status = 'inactive';
+        node.currentActiveTasks = 0;
+        node.lastSeenAt = new Date();
+        await node.save();
+
+        const session = await ParticipationSession.findOne({
+          deviceId: node._id,
+          status: 'active',
+        }).sort({ createdAt: -1 });
+
+        if (session) {
+          session.status = 'stopped';
+          session.endTime = new Date();
+          session.stoppedAt = new Date();
+          session.stopReason = req.body?.reason || 'drain_completed';
+          await session.save();
+        }
+
+        logger.info({
+          nodeId: node._id.toString(),
+          event: 'NODE_STOPPED',
+          reason: 'drain_completed',
+          sessionId: session?.sessionId,
+        }, 'Node drain completed — stopped');
+
+        return res.json({
+          message: "Drain completed. Participation stopped.",
+          status: 'inactive',
+          node,
+          session,
+        });
+      }
+
+      // Still draining with active tasks
+      return res.json({
+        message: `Node is still draining with ${activeTasks} active task(s).`,
+        status: 'draining',
+        activeTasks,
+        node,
+      });
+    }
+
     const activeTasks = node.currentActiveTasks || 0;
 
     if (activeTasks > 0) {
@@ -338,7 +384,7 @@ export const stopParticipation = async (req, res) => {
       session.status = 'stopped';
       session.endTime = new Date();
       session.stoppedAt = new Date();
-      session.stopReason = req.body.reason || 'user_requested';
+      session.stopReason = req.body?.reason || 'user_requested';
       await session.save();
     }
 

@@ -196,15 +196,15 @@ describe('Phase 1: Node Lifecycle Tests', () => {
   });
   
   it('T9: Stop with zero tasks stops immediately', async () => {
-    // Ensure node has no active tasks
+    // Ensure node is in active state with no active tasks
     const NodeDevice = (await import('../models/NodeDevice.js')).default;
-    await NodeDevice.findByIdAndUpdate(testNodeDeviceId, { currentActiveTasks: 0 });
+    await NodeDevice.findByIdAndUpdate(testNodeDeviceId, { currentActiveTasks: 0, status: 'active' });
     
     const res = await request(app)
       .post('/api/node/stop')
-      .set('Authorization', `Bearer ${testNodeToken}`)
-      .expect(200);
+      .set('Authorization', `Bearer ${testNodeToken}`);
     
+    expect(res.status).toBe(200);
     expect(res.body.status).toBe('inactive');
   });
   
@@ -445,8 +445,8 @@ describe('Phase 1: Authorization', () => {
       .get('/api/node/dashboard')
       .set('Authorization', `Bearer ${testClientToken}`);
     
-    // Should return 404 (no node for this client user)
-    expect(res.status).toBe(404);
+    // Should return 403 (role middleware blocks platform_client from node endpoints)
+    expect(res.status).toBe(403);
   });
   
   it('T25: Unauthenticated user blocked from node operations', async () => {

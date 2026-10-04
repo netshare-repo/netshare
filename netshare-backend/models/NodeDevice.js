@@ -88,7 +88,7 @@ const nodeDeviceSchema = new mongoose.Schema(
 
     latencyMs: {
       type: Number,
-      default: 45,
+      default: null,
     },
 
     lastSeenAt: {

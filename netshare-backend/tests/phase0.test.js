@@ -11,11 +11,14 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // Clean up test data
-  const User = (await import('../models/User.js')).default;
-  const Wallet = (await import('../models/Wallet.js')).default;
-  await User.deleteMany({ email: { $regex: /^test_phase0_/ } });
-  await Wallet.deleteMany({});
-  await mongoose.connection.close();
+  try {
+    const User = (await import('../models/User.js')).default;
+    const Wallet = (await import('../models/Wallet.js')).default;
+    await User.deleteMany({ email: { $regex: /^test_phase0_/ } });
+    await Wallet.deleteMany({ userId: { $exists: false } });
+  } catch (e) {
+    // Connection may already be closed by another test suite
+  }
 });
 
 describe('Phase 0: Security Foundation Tests', () => {

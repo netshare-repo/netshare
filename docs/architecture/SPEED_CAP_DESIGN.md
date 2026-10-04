@@ -1,25 +1,62 @@
-# Speed Cap Design
+# NetShare Speed Cap Design v1.0
 
-This document outlines the architecture and design of speed capabilities and limitations within the NetShare client agents.
+## Overview
 
-## Throttling Mechanism
+NetShare enforces **user-configurable bandwidth speed caps** that limit the maximum transfer rate a node can sustain during task execution. These caps protect node participants from excessive bandwidth consumption and honor their ISP plan constraints.
 
-- **Desktop Node.js Agent**: Implements application-level HTTP throttling. This is achieved using delayed chunk reading combined with a configurable byte-rate limiter.
-- **Flutter Android Agent**: Follows the same application-level approach. The Dart HTTP client applies rate limiting during stream processing.
-- **Scope limitation**: Throttling is strictly **application-level**. We do NOT perform OS/network-level traffic shaping.
+## Speed Cap Fields
 
-## Accuracy & Caveats
+| Field | Schema | Default | Description |
+|---|---|---|---|
+| `uploadSpeedCapMbps` | `NodeDevice.uploadSpeedCapMbps` | 5 Mbps | Max upload speed the node will sustain |
+| `downloadSpeedCapMbps` | `NodeDevice.downloadSpeedCapMbps` | 10 Mbps | Max download speed the node will sustain |
+| `speedCapMbps` | `NodeDevice.speedCapMbps` | 10 Mbps | Legacy unified cap (alias for downloadSpeedCapMbps) |
 
-- **Best-effort accuracy**: Actual throughput may be slightly below the configured cap due to chunk granularity and event loop scheduling.
-- **Short transfers**: If a transfer duration is `< 500ms`, the throughput measurement is considered unreliable and will be reported as `null`.
+## Important Distinction
 
-## Future Considerations
+| Concept | Meaning |
+|---|---|
+| **Speed Cap** | User-configured maximum. A **policy limit**, not a measurement. |
+| **Measured Throughput** | Actually observed transfer rate during execution. Always ≤ speed cap (in theory). |
 
-- **VpnService (Android)**: Future implementations utilizing Android's `VpnService` will require a fundamentally different enforcement mechanism at the network layer.
+**Never display a speed cap as if it were measured throughput.**
 
-## Configuration & Reporting
+## Enforcement Points
 
-- **Configuration**:
-  - `configuredUploadCapMbps` and `configuredDownloadCapMbps` are defined by the user and stored on the `NodeDevice` model.
-- **Reporting**:
-  - `measuredUploadMbps` and `measuredDownloadMbps` are calculated by the agent and reported back to the backend after each task completes.
+### Phase 1 (Current)
+
+Speed caps are **advisory and display-only** in Phase 1:
+- Stored in `NodeDevice` and displayed on dashboards
+- Task allocation considers them as metadata for future ML scoring
+- No active traffic shaping or rate limiting is implemented
+
+### Phase 2+ (Planned)
+
+When real routing is implemented via Android VpnService / WebRTC:
+- Agent-side rate limiting will throttle transfer to configured cap
+- Backend validates reported throughput doesn't consistently exceed cap
+- Anomaly detection flags nodes reporting throughput > cap
+
+## API Representation
+
+```json
+{
+  "uploadSpeedCap": 5,
+  "downloadSpeedCap": 10,
+  "measuredUploadMbps": null,
+  "measuredDownloadMbps": null
+}
+```
+
+- `*SpeedCap` = user configuration (always present)
+- `measured*Mbps` = actual observation (`null` if no recent task)
+
+## Configuration Constraints
+
+| Rule | Enforcement |
+|---|---|
+| Minimum upload cap | 0.5 Mbps (below this, node is not useful) |
+| Minimum download cap | 1 Mbps |
+| Maximum upload cap | None (limited by ISP) |
+| Maximum download cap | None (limited by ISP) |
+| Validation | `updateNodeSettings` controller validates and clamps |
