@@ -6,9 +6,12 @@ import generateToken from "../utils/generateToken.js";
 import { isValidEmail, isStrongPassword, isValidPhone } from "../utils/validation.js";
 import { sendOtpEmail } from '../services/emailService.js';
 import logger from '../lib/logger.js';
+import config from '../config/env.js';
+import { runTransaction } from '../lib/mongoTransaction.js';
+import { recordFailedOtpAttempt, resetOtpAttempts } from '../middleware/otpProtection.js';
 // Helper to generate a 6-digit OTP
 const generateOTP = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 };
 
 export const registerUser = async (req, res) => {
@@ -60,7 +63,8 @@ export const registerUser = async (req, res) => {
       role,
       isVerified: false,
       signupOtpHash: otpHash,
-      signupOtpExpires: otpExpires
+      signupOtpExpires: otpExpires,
+      lastOtpSentAt: new Date(),
     });
 
     // Send OTP via email
@@ -94,7 +98,7 @@ export const verifySignupOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    if (!email || !otp) {
+    if (!email || typeof otp !== 'string' || !/^\d{6}$/.test(otp)) {
       return res.status(400).json({ message: "Email and OTP are required" });
     }
 
@@ -111,6 +115,7 @@ export const verifySignupOtp = async (req, res) => {
     const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
 
     if (user.signupOtpHash !== otpHash) {
+      await recordFailedOtpAttempt(user);
       return res.status(400).json({ message: "Invalid OTP" });
     }
 
@@ -118,16 +123,19 @@ export const verifySignupOtp = async (req, res) => {
       return res.status(400).json({ message: "OTP has expired" });
     }
 
-    user.isVerified = true;
-    user.signupOtpHash = null;
-    user.signupOtpExpires = null;
-    await user.save();
-
-    // Create Wallet after successful verification
-    await Wallet.create({
-      userId: user._id,
-      balance: user.role === "platform_client" || user.role === "both" ? 500 : 0,
+    const verified = await runTransaction(async session => {
+      const changed = await User.findOneAndUpdate({ _id: user._id, isVerified: false,
+        signupOtpHash: otpHash, signupOtpExpires: { $gte: new Date() } },
+        { $set: { isVerified: true, signupOtpHash: null, signupOtpExpires: null,
+          otpAttempts: 0, otpLockedUntil: null } }, { new: true, session });
+      if (!changed) return false;
+      await Wallet.create([{
+        userId: user._id,
+        balance: !config.isProduction && (user.role === 'platform_client' || user.role === 'both') ? 500 : 0,
+      }], { session });
+      return true;
     });
+    if (!verified) return res.status(409).json({ message: 'OTP already consumed, changed, or expired' });
 
     return res.json({
       message: "Verification successful",
@@ -172,6 +180,7 @@ export const resendSignupOtp = async (req, res) => {
 
     user.signupOtpHash = otpHash;
     user.signupOtpExpires = otpExpires;
+    user.lastOtpSentAt = new Date();
     await user.save();
 
     // Send OTP via email
@@ -269,6 +278,7 @@ export const forgotPassword = async (req, res) => {
 
     user.resetOtpHash = otpHash;
     user.resetOtpExpires = otpExpires;
+    user.lastOtpSentAt = new Date();
     await user.save();
 
     // Send OTP via email
@@ -299,7 +309,7 @@ export const verifyResetOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    if (!email || !otp) {
+    if (!email || typeof otp !== 'string' || !/^\d{6}$/.test(otp)) {
       return res.status(400).json({ message: "Email and OTP are required" });
     }
 
@@ -312,6 +322,7 @@ export const verifyResetOtp = async (req, res) => {
     const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
 
     if (user.resetOtpHash !== otpHash || new Date() > user.resetOtpExpires) {
+      await recordFailedOtpAttempt(user);
       return res.status(400).json({ message: "Invalid or expired OTP" });
     }
 
@@ -320,6 +331,7 @@ export const verifyResetOtp = async (req, res) => {
     // A simpler approach: return a success status, frontend can then call resetPassword
     // passing the OTP again to authorize the reset.
 
+    await resetOtpAttempts(user);
     return res.json({
       message: "OTP verified successfully. You can now reset your password.",
     });
@@ -335,7 +347,7 @@ export const resetPassword = async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
 
-    if (!email || !otp || !newPassword) {
+    if (!email || typeof otp !== 'string' || !/^\d{6}$/.test(otp) || !newPassword) {
       return res.status(400).json({ message: "Email, OTP and new password are required" });
     }
 
@@ -354,13 +366,16 @@ export const resetPassword = async (req, res) => {
     const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
 
     if (user.resetOtpHash !== otpHash || new Date() > user.resetOtpExpires) {
+      await recordFailedOtpAttempt(user);
       return res.status(400).json({ message: "Invalid or expired OTP" });
     }
 
-    user.password = await bcrypt.hash(newPassword, 10);
-    user.resetOtpHash = null;
-    user.resetOtpExpires = null;
-    await user.save();
+    const changed = await User.findOneAndUpdate({ _id: user._id, resetOtpHash: otpHash,
+      resetOtpExpires: { $gte: new Date() } }, { $set: {
+      password: await bcrypt.hash(newPassword, 10), resetOtpHash: null, resetOtpExpires: null,
+      otpAttempts: 0, otpLockedUntil: null,
+    } });
+    if (!changed) return res.status(409).json({ message: 'Reset OTP already consumed or expired' });
 
     return res.json({
       message: "Password reset successfully. You can now login.",

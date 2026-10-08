@@ -86,6 +86,25 @@ const nodeDeviceSchema = new mongoose.Schema(
       max: 100,
     },
 
+    ratingAverage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+
+    ratingTotal: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    ratingCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     latencyMs: {
       type: Number,
       default: null,

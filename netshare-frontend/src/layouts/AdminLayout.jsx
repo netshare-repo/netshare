@@ -9,9 +9,9 @@ import {
   PackageCheck,
   LogOut,
   Network,
-  Bell,
 } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/authState";
+import NotificationBell from '../components/common/NotificationBell';
 import "./AdminLayout.css";
 
 function AdminLayout({ children }) {
@@ -38,6 +38,7 @@ function AdminLayout({ children }) {
         </div>
 
         <nav className="admin-nav">
+          <NavLink to="/admin/operations"><ListChecks size={20} /> Alerts / Reports / Disputes</NavLink>
           <NavLink to="/admin/dashboard">
             <LayoutDashboard size={20} />
             Dashboard
@@ -61,6 +62,11 @@ function AdminLayout({ children }) {
           <NavLink to="/admin/transactions">
             <Wallet size={20} />
             Transactions
+          </NavLink>
+
+          <NavLink to="/admin/payments">
+            <Wallet size={20} />
+            Payments
           </NavLink>
 
           <NavLink to="/admin/marketplace/products">
@@ -93,9 +99,7 @@ function AdminLayout({ children }) {
           </div>
 
           <div className="admin-topbar-right">
-            <button className="admin-bell">
-              <Bell size={19} />
-            </button>
+            <NotificationBell />
 
             <div className="admin-user-pill">
               <div className="admin-avatar">

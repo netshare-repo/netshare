@@ -1,105 +1,108 @@
+# Production-like single-host deployment; not a high-availability replica set.
+# Provision the Mongo keyfile and credentials before starting. See the checklist.
 services:
-  # 1. MongoDB Database
   mongo:
-    image: mongo:7.0
-    container_name: netshare-mongo
+    image: mongo:8.2
     restart: unless-stopped
-    ports:
-      - "27017:27017"
+    entrypoint: ["/bin/bash", "/opt/netshare/mongo-start.sh"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?Set MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD}
+    secrets: [mongodb_keyfile]
     volumes:
       - mongo_data:/data/db
-    networks:
-      - netshare-network
+      - ./deployment/mongo-start.sh:/opt/netshare/mongo-start.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --username \"$$MONGO_INITDB_ROOT_USERNAME\" --password \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval 'quit(db.hello().isWritablePrimary ? 0 : 1)'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    networks: [netshare-network]
 
-  # 2. Redis Message Broker & Task Queue
+  mongo-init:
+    image: mongo:8.2
+    restart: on-failure
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?Set MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD}
+    volumes:
+      - ./deployment/mongo-init.js:/opt/netshare/mongo-init.js:ro
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - 'exec mongosh --host mongo --username "$$MONGO_INITDB_ROOT_USERNAME" --password "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --quiet /opt/netshare/mongo-init.js'
+    depends_on:
+      mongo: {condition: service_started}
+    networks: [netshare-network]
+
   redis:
     image: redis:7-alpine
-    container_name: netshare-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - netshare-network
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [netshare-network]
 
-  # 3. Python ML Ranking Service
   ml-service:
-    build:
-      context: ./ml-service
-      dockerfile: Dockerfile
-    container_name: netshare-ml
+    build: ./ml-service
     restart: unless-stopped
-    ports:
-      - "5001:5001"
-    environment:
-      - PORT=5001
-    networks:
-      - netshare-network
+    environment: {PORT: "5001"}
+    networks: [netshare-network]
 
-  # 4. NetShare Backend (Control Plane & Real-Time Socket Server)
   backend:
-    build:
-      context: ./netshare-backend
-      dockerfile: Dockerfile
-    container_name: netshare-backend
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    environment:
-      - PORT=8000
-      - MONGO_URI=mongodb://mongo:27017/netshare_db?replicaSet=rs0
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
-      - NODE_ENV=production
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
-      - SMTP_HOST=${SMTP_HOST:-}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USER=${SMTP_USER:-}
-      - SMTP_PASS=${SMTP_PASS:-}
-      - SMTP_FROM=${SMTP_FROM:-noreply@netshare.io}
-    depends_on:
-      - mongo
-      - redis
-      - ml-service
-    networks:
-      - netshare-network
-
-  # 5. Headless NetShare Node Execution Agent (Worker)
-  node-agent:
-    build:
-      context: ./netshare-agent
-      dockerfile: Dockerfile
-    container_name: netshare-agent-1
+    build: ./netshare-backend
     restart: unless-stopped
     environment:
-      - NETSHARE_SERVER_URL=http://backend:8000
-      - NODE_API_KEY=${NODE_API_KEY:?NODE_API_KEY must be set}
+      PORT: "8000"
+      # Use a least-privilege application user; encode URI credentials.
+      MONGO_URI: ${MONGO_URI:?Set authenticated Mongo URI with replicaSet=rs0}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      NODE_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:?Set public frontend URL}
+      CORS_ORIGINS: ${CORS_ORIGINS:?Set allowed origins}
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:?Set SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS:?Set SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM:?Set SMTP_FROM}
+      ML_SERVICE_URL: http://ml-service:5001
+      ML_TIMEOUT_MS: "750"
+      WEBRTC_STUN_URLS: ${WEBRTC_STUN_URLS:-}
+      WEBRTC_TURN_URL: ${WEBRTC_TURN_URL:-}
+      WEBRTC_TURN_USERNAME: ${WEBRTC_TURN_USERNAME:-}
+      WEBRTC_TURN_CREDENTIAL: ${WEBRTC_TURN_CREDENTIAL:-}
     depends_on:
-      - backend
-    networks:
-      - netshare-network
+      mongo: {condition: service_healthy}
+      mongo-init: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [netshare-network]
 
-  # 6. React Web Client Frontend
   frontend:
-    build:
-      context: ./netshare-frontend
-      dockerfile: Dockerfile
-    container_name: netshare-frontend
+    build: ./netshare-frontend
     restart: unless-stopped
-    ports:
-      - "3000:80"
+    # Put a TLS ingress in front; do not expose this clear-text listener publicly.
+    ports: ["127.0.0.1:3000:80"]
     depends_on:
-      - backend
-    networks:
-      - netshare-network
+      backend: {condition: service_healthy}
+    networks: [netshare-network]
 
+# Desktop Socket.IO-only executor is intentionally not a production service.
 networks:
-  netshare-network:
-    driver: bridge
-
+  netshare-network: {driver: bridge}
 volumes:
   mongo_data:
   redis_data:
+secrets:
+  mongodb_keyfile:
+    file: ${MONGO_KEYFILE_PATH:?Set path to provisioned Mongo replica-set keyfile}

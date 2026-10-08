@@ -1,195 +1,67 @@
-import http from "http";
-import https from "https";
-import { performance } from "perf_hooks";
+import { executeSecureResidentialHttpTest } from './secureTaskExecutor.js';
 
 export class TaskExecutor {
-  /**
-   * Executes an HTTP Performance Test
-   * Collects: response time, status code, download size, connection time
-   */
-  async executeHttpPerformanceTest(targetUrl, limits = {}) {
-    return new Promise((resolve) => {
-      const urlObj = new URL(targetUrl);
-      const isHttps = urlObj.protocol === "https:";
-      const client = isHttps ? https : http;
-
-      const startTime = performance.now();
-      let dnsTime = 0;
-      let tcpTime = 0;
-      let firstByteTime = 0;
-      let downloadSize = 0;
-      let statusCode = 0;
-      let headers = {};
-
-      const req = client.get(
-        targetUrl,
-        {
-          timeout: limits.timeoutMs || 25000,
-          headers: {
-            "User-Agent": "NetShare-Edge-Agent/1.0",
-            Accept: "*/*",
-          },
-        },
-        (res) => {
-          firstByteTime = performance.now() - startTime;
-          statusCode = res.statusCode || 200;
-          headers = res.headers;
-
-          res.on("data", (chunk) => {
-            downloadSize += chunk.length;
-          });
-
-          res.on("end", () => {
-            const totalDuration = performance.now() - startTime;
-            const sizeMB = parseFloat((downloadSize / (1024 * 1024)).toFixed(4));
-            // Minimum billing/usage threshold of 0.05MB for headers/transfers
-            const billedMB = Math.max(0.05, sizeMB);
-
-            resolve({
-              success: statusCode >= 200 && statusCode < 400,
-              statusCode,
-              latencyMs: Math.round(firstByteTime),
-              totalDurationMs: Math.round(totalDuration),
-              connectionTimeMs: Math.round(tcpTime || firstByteTime * 0.4),
-              dnsTimeMs: Math.round(dnsTime),
-              downloadSizeBytes: downloadSize,
-              downloadBandwidthMB: billedMB,
-              bandwidthUsedMB: billedMB,
-              uploadBandwidthMB: 0.01,
-              packetLoss: 0,
-              successRate: statusCode >= 200 && statusCode < 400 ? 100 : 50,
-              resultData: {
-                statusCode,
-                contentType: headers["content-type"] || "unknown",
-                server: headers["server"] || "unknown",
-                responseSizeBytes: downloadSize,
-                dnsTimeMs: Math.round(dnsTime),
-                connectionTimeMs: Math.round(tcpTime || firstByteTime * 0.4),
-                ttfbMs: Math.round(firstByteTime),
-                totalTimeMs: Math.round(totalDuration),
-              },
-            });
-          });
-        }
-      );
-
-      req.on("socket", (socket) => {
-        socket.on("lookup", () => {
-          dnsTime = performance.now() - startTime;
-        });
-        socket.on("connect", () => {
-          tcpTime = performance.now() - startTime;
-        });
-      });
-
-      req.on("timeout", () => {
-        req.destroy();
-        resolve({
-          success: false,
-          statusCode: 408,
-          latencyMs: limits.timeoutMs || 25000,
-          totalDurationMs: limits.timeoutMs || 25000,
-          connectionTimeMs: 0,
-          downloadSizeBytes: 0,
-          downloadBandwidthMB: 0.01,
-          bandwidthUsedMB: 0.01,
-          uploadBandwidthMB: 0.01,
-          packetLoss: 100,
-          successRate: 0,
-          resultData: { error: "Request timed out" },
-        });
-      });
-
-      req.on("error", (err) => {
-        const totalDuration = performance.now() - startTime;
-        resolve({
-          success: false,
-          statusCode: 502,
-          latencyMs: Math.round(totalDuration),
-          totalDurationMs: Math.round(totalDuration),
-          connectionTimeMs: 0,
-          downloadSizeBytes: 0,
-          downloadBandwidthMB: 0.01,
-          bandwidthUsedMB: 0.01,
-          uploadBandwidthMB: 0.01,
-          packetLoss: 100,
-          successRate: 0,
-          resultData: { error: err.message },
-        });
-      });
+  /** Execute one independently validated HTTP/HTTPS probe. */
+  async executeHttpPerformanceTest(targetUrl, limits = {}, authorization = {}) {
+    return executeSecureResidentialHttpTest(targetUrl, {
+      authorizedHost: authorization.authorizedHost,
+      authorizedPort: authorization.authorizedPort,
+      authorizedMethod: authorization.authorizedMethod || 'GET',
+      timeoutMs: limits.timeoutMs || 25000,
+      maxRedirects: 3,
     });
   }
 
-  /**
-   * Executes a Ping / Latency Test
-   * Collects: latency, jitter, packet loss
-   */
-  async executePingTest(targetUrl, limits = {}) {
-    const pingSamples = 4;
-    const latencies = [];
-    let failedPings = 0;
+  /** Repeated secure HTTP probes used for latency/availability tasks. */
+  async executePingTest(targetUrl, limits = {}, authorization = {}) {
+    const samples = Math.min(Math.max(Number(limits.executionLimit || 3), 1), 10);
+    const results = [];
 
-    for (let i = 0; i < pingSamples; i++) {
-      const sample = await this.executeHttpPerformanceTest(targetUrl, {
-        timeoutMs: 5000,
-      });
-
-      if (sample.success) {
-        latencies.push(sample.latencyMs);
-      } else {
-        failedPings++;
-      }
-
-      // 100ms pause between pings
-      if (i < pingSamples - 1) {
-        await new Promise((r) => setTimeout(r, 100));
-      }
+    for (let i = 0; i < samples; i += 1) {
+      results.push(await this.executeHttpPerformanceTest(
+        targetUrl,
+        { ...limits, timeoutMs: Math.min(limits.timeoutMs || 5000, 5000) },
+        authorization
+      ));
     }
 
-    const packetLoss = Math.round((failedPings / pingSamples) * 100);
-    const avgLatency =
-      latencies.length > 0
-        ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
-        : 500;
-
-    const minLatency = latencies.length > 0 ? Math.min(...latencies) : 500;
-    const maxLatency = latencies.length > 0 ? Math.max(...latencies) : 500;
+    const successful = results.filter((result) => result.success);
+    const bandwidthUsedMB = results.reduce((sum, result) => sum + Number(result.bandwidthUsedMB || 0), 0);
+    const latencyMs = successful.length
+      ? Math.round(successful.reduce((sum, result) => sum + result.latencyMs, 0) / successful.length)
+      : Math.max(...results.map((result) => result.latencyMs), 0);
+    const packetLoss = Math.round(((samples - successful.length) / samples) * 100);
 
     return {
-      success: packetLoss < 100,
-      statusCode: 200,
-      latencyMs: avgLatency,
+      success: successful.length > 0,
+      statusCode: successful.at(-1)?.statusCode || results.at(-1)?.statusCode || 502,
+      latencyMs,
       packetLoss,
-      bandwidthUsedMB: 0.05,
-      downloadBandwidthMB: 0.05,
-      uploadBandwidthMB: 0.02,
-      successRate: 100 - packetLoss,
-      resultData: {
-        samples: pingSamples,
-        packetLossPercent: packetLoss,
-        avgLatencyMs: avgLatency,
-        minLatencyMs: minLatency,
-        maxLatencyMs: maxLatency,
-        jitterMs: maxLatency - minLatency,
-      },
+      bandwidthUsedMB,
+      downloadBandwidthMB: results.reduce((sum, result) => sum + Number(result.downloadBandwidthMB || 0), 0),
+      uploadBandwidthMB: results.reduce((sum, result) => sum + Number(result.uploadBandwidthMB || 0), 0),
+      successRate: Math.round((successful.length / samples) * 100),
+      resultData: { samples, packetLossPercent: packetLoss },
     };
   }
 
-  /**
-   * Main Task Execution Dispatcher
-   */
   async executeTask(task) {
-    const { target, taskType, serviceType, limits } = task;
-    const type = (taskType || serviceType || "").toLowerCase();
+    const { target, taskType, serviceType, limits = {} } = task;
+    const type = (taskType || serviceType || '').toLowerCase();
+    const authorization = {
+      authorizedHost: task.authorizedHost,
+      authorizedPort: Number(task.authorizedPort),
+      authorizedMethod: task.authorizedMethod || 'GET',
+    };
 
-    console.log(`[TaskExecutor] Executing task ${task.taskId} (Type: ${type}, Target: ${target})...`);
-
-    if (type.includes("ping") || type.includes("connectivity")) {
-      return await this.executePingTest(target, limits);
-    } else {
-      // Handles performance_testing, ad_verification, accessibility_testing, etc.
-      return await this.executeHttpPerformanceTest(target, limits);
+    if (!authorization.authorizedHost || !authorization.authorizedPort) {
+      throw new Error('Task authorization envelope is missing host or port');
     }
+
+    console.log(`[TaskExecutor] Executing authorized task ${task.taskId} (Type: ${type}, Target: ${target})...`);
+    return type.includes('ping') || type.includes('connectivity')
+      ? this.executePingTest(target, limits, authorization)
+      : this.executeHttpPerformanceTest(target, limits, authorization);
   }
 }
 

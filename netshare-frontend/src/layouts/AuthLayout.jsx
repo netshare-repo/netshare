@@ -10,7 +10,7 @@ import {
   LogOut,
   ShieldCheck,
 } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/authState";
 import "./AdminLayout.css";
 
 function AdminLayout({ children }) {

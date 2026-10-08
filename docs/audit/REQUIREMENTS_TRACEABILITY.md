@@ -1,210 +1,106 @@
-# NetShare — Requirements Traceability Matrix
-> Generated: 2026-09-26 | Against NETSHARE_SRS.md (official, authoritative)
+# Requirements Traceability — Phase 8 authoritative register
 
----
+Updated: 2026-10-08. Source: `docs/NETSHARE_SRS.md` §3.1 official numbered FR tables and `docs/NETSHARE_CHAPTER_3.md`. The SRS contains **84** functional requirements. The former 64-row audit omitted 20 requirements and is superseded, not a valid completion denominator.
 
-## Legend
-- **DONE** — End-to-end working using real implementation  
-- **PARTIAL** — Some components exist but complete requirement does not work  
-- **MOCK_ONLY** — UI/dummy/static/simulated implementation only  
-- **BROKEN** — Implementation exists but fails or contradicts requirements  
-- **NOT_STARTED** — No meaningful implementation exists  
-- **NOT_APPLICABLE** — Explicitly inapplicable per official documents  
+**64/84 DONE (76.19%); 20/84 PARTIAL; release acceptance NOT READY.** DONE means implemented with repository/API/unit/integration evidence, not certified device/browser production E2E. PARTIAL includes missing requirement constraints, missing required mobile surfaces and blocked physical-device acceptance. Phase completion is not synonymous with full SRS compliance. Tests are explicit fixtures unless the production-process acceptance harness states otherwise.
 
----
+Paths below are relative to their backend/frontend/mobile source roots. Full validation scope and limitations: [release report](RELEASE_CANDIDATE_REPORT.md). Strict NFRs are audited separately in [NFR audit](NFR_AUDIT.md).
 
-## FR1.x — Registration / Login (Module M1)
+| Official ID | SRS requirement | Status | Actual code/test evidence or remaining gap |
+|---|---|---|---|
+| FR1.1 | User Registration | PARTIAL | Email registration works; email-only schema prevents phone-only registration and phone uniqueness is not enforced. |
+| FR1.2 | Password Entry | DONE | authController/authRoutes; phase0 + phase8 OTP/auth tests; rcValidation SMTP/register/login |
+| FR1.3 | Role Selection | DONE | authController/authRoutes; phase0 + phase8 OTP/auth tests; rcValidation SMTP/register/login |
+| FR1.4 | Verification Method Selection | PARTIAL | Email OTP works; no selectable SMS/alternative verification channel. |
+| FR1.5 | Register Action | DONE | authController/authRoutes; phase0 + phase8 OTP/auth tests; rcValidation SMTP/register/login |
+| FR1.6 | Login Action | DONE | authController/authRoutes; phase0 + phase8 OTP/auth tests; rcValidation SMTP/register/login |
+| FR2.1 | View Profile | DONE | userController; web/mobile Profile; phase8 password/ownership tests |
+| FR2.2 | Update Basic Information | DONE | userController; web/mobile Profile; phase8 password/ownership tests |
+| FR2.3 | Upload Profile Photo | PARTIAL | Profile image string can change; supported-format upload validation/storage is absent. |
+| FR2.4 | View Active Role | DONE | userController; web/mobile Profile; phase8 password/ownership tests |
+| FR2.5 | Update Role | PARTIAL | Both-role workspace switching works; persisted account role change workflow is absent. |
+| FR2.6 | Participation Preference Setting | DONE | userController; web/mobile Profile; phase8 password/ownership tests |
+| FR2.7 | Change Security Settings | DONE | userController; web/mobile Profile; phase8 password/ownership tests |
+| FR3.1 | View Participation Status | PARTIAL | Persisted participation status exists; correlation with actual Android VPN/device activity is BLOCKED. |
+| FR3.2 | Set Bandwidth Limit | PARTIAL | Allocation/settlement enforce stored remaining allowance; daily reset and strict in-flight daily cap are not complete. |
+| FR3.3 | Set Speed Cap | PARTIAL | Speed-cap settings are stored; packet-level upload/download throttling is not implemented. |
+| FR3.4 | Set Concurrent Task Limit | DONE | nodeController/nodeHealth/allocationClaimService; phase1 + phase8; Flutter node screens |
+| FR3.5 | Start Participation | PARTIAL | Authenticated start and device-session consent are enforced; real Android start/VPN validation is BLOCKED. |
+| FR3.6 | Stop Participation | PARTIAL | Backend drain/stop is tested; real Android shutdown/background behavior is BLOCKED. |
+| FR3.7 | View Live Activity | PARTIAL | Recorded bandwidth/capacity/health exist; measured live speed and complete device metrics remain incomplete. |
+| FR3.8 | View Credits Earned | DONE | nodeController/nodeHealth/allocationClaimService; phase1 + phase8; Flutter node screens |
+| FR4.1 | View Session Metrics | DONE | sessionController/ParticipationSession/taskSettlementService; phase1 + phase8; NodeSession |
+| FR4.2 | View Connection Metrics | PARTIAL | Measured HTTP latency/status exists; packet loss is explicitly unmeasured, not fabricated. |
+| FR4.3 | View Session Details | PARTIAL | Session ID/region exist; measured current transfer speed is incomplete. |
+| FR4.4 | Pause Session | DONE | sessionController/ParticipationSession/taskSettlementService; phase1 + phase8; NodeSession |
+| FR4.5 | Terminate Session | PARTIAL | Backend termination is tested; real Android resources/VPN revoke behavior is BLOCKED. |
+| FR5.1 | View Wallet Balance | DONE | walletService/paymentService; phase5 + phase8; web NodeWallet and Flutter Wallet |
+| FR5.2 | View Earnings Summary | DONE | walletService/paymentService; phase5 + phase8; web NodeWallet and Flutter Wallet |
+| FR5.3 | View Transaction History | DONE | walletService/paymentService; phase5 + phase8; web NodeWallet and Flutter Wallet |
+| FR5.4 | Submit Withdrawal Request | PARTIAL | Authorized withdrawal API/web flow passes; Node Participant Flutter withdrawal UI is absent. |
+| FR5.5 | Select Withdrawal Channel | PARTIAL | Supported channel validation/web selection passes; Flutter node-wallet selection is absent. |
+| FR5.6 | Enter Withdrawal Details | PARTIAL | Validated owned account details/web submission pass; Flutter node-wallet withdrawal details are absent. |
+| FR6.1 | View Active Tasks | DONE | Flutter client_dashboard_screen/client_tasks_screen/client_wallet_screen; client_role_test |
+| FR6.2 | View Completed Tasks | DONE | Flutter client_dashboard_screen/client_tasks_screen/client_wallet_screen; client_role_test |
+| FR6.3 | View Credit Usage | DONE | Flutter client_dashboard_screen/client_tasks_screen/client_wallet_screen; client_role_test |
+| FR6.4 | Submit New Task Shortcut | DONE | Flutter client_dashboard_screen/client_tasks_screen/client_wallet_screen; client_role_test |
+| FR6.5 | View Results Shortcut | DONE | Flutter client_dashboard_screen/client_tasks_screen/client_wallet_screen; client_role_test |
+| FR6.6 | Top-Up Shortcut | DONE | Flutter client_dashboard_screen/client_tasks_screen/client_wallet_screen; client_role_test |
+| FR6.7 | View Recent Task Activity | DONE | Flutter client_dashboard_screen/client_tasks_screen/client_wallet_screen; client_role_test |
+| FR7.1 | Enter Target URL | DONE | taskController/pricingService/regionAvailabilityService; phase3; Flutter client submission tests |
+| FR7.2 | Select Service Type | DONE | taskController/pricingService/regionAvailabilityService; phase3; Flutter client submission tests |
+| FR7.3 | Select Target Region | DONE | taskController/pricingService/regionAvailabilityService; phase3; Flutter client submission tests |
+| FR7.4 | Set Execution Limit | DONE | taskController/pricingService/regionAvailabilityService; phase3; Flutter client submission tests |
+| FR7.5 | Submit Task | DONE | taskController/pricingService/regionAvailabilityService; phase3; Flutter client submission tests |
+| FR7.6 | Reset Task Form | DONE | taskController/pricingService/regionAvailabilityService; phase3; Flutter client submission tests |
+| FR7.7 | View Estimated Cost | DONE | taskController/pricingService/regionAvailabilityService; phase3; Flutter client submission tests |
+| FR7.8 | View Region Availability | DONE | taskController/pricingService/regionAvailabilityService; phase3; Flutter client submission tests |
+| FR8.1 | View Task Information | DONE | taskController/reportService; phase3; Flutter details tests; production rating/report smoke |
+| FR8.2 | View Task Status | DONE | taskController/reportService; phase3; Flutter details tests; production rating/report smoke |
+| FR8.3 | View Result Summary | DONE | taskController/reportService; phase3; Flutter details tests; production rating/report smoke |
+| FR8.4 | Download Report | DONE | taskController/reportService; phase3; Flutter details tests; production rating/report smoke |
+| FR8.5 | Rate Nodes | DONE | taskController/reportService; phase3; Flutter details tests; production rating/report smoke |
+| FR9.1 | Enter Top-Up | DONE | paymentService/adminPaymentController; phase5 + phase8; Flutter wallet/top-up tests |
+| FR9.2 | Select Payment Method | DONE | paymentService/adminPaymentController; phase5 + phase8; Flutter wallet/top-up tests |
+| FR9.3 | Enter Payment Reference | DONE | paymentService/adminPaymentController; phase5 + phase8; Flutter wallet/top-up tests |
+| FR9.4 | Upload Payment Proof | DONE | paymentService/adminPaymentController; phase5 + phase8; Flutter wallet/top-up tests |
+| FR9.5 | Submit Top-Up Request | DONE | paymentService/adminPaymentController; phase5 + phase8; Flutter wallet/top-up tests |
+| FR9.6 | View Verification Status | DONE | paymentService/adminPaymentController; phase5 + phase8; Flutter wallet/top-up tests |
+| FR10.1 | View Marketplace Catalogue | DONE | marketplaceController; phase6 + phase8; web/Flutter marketplace screens |
+| FR10.2 | View Product Information | DONE | marketplaceController; phase6 + phase8; web/Flutter marketplace screens |
+| FR10.3 | Redeem Product Option | DONE | marketplaceController; phase6 + phase8; web/Flutter marketplace screens |
+| FR11.1 | View Selected Product | DONE | marketplaceController/orderStatusService; phase6 + phase8; production fulfilment/notification smoke |
+| FR11.2 | View Available Balance | DONE | marketplaceController/orderStatusService; phase6 + phase8; production fulfilment/notification smoke |
+| FR11.3 | Confirm Order | DONE | marketplaceController/orderStatusService; phase6 + phase8; production fulfilment/notification smoke |
+| FR11.4 | Cancel Order | DONE | marketplaceController/orderStatusService; phase6 + phase8; production fulfilment/notification smoke |
+| FR11.5 | View Order Status | DONE | marketplaceController/orderStatusService; phase6 + phase8; production fulfilment/notification smoke |
+| FR12.1 | View Total Users | DONE | adminController/operationsController; phase6; admin dashboard/Operations |
+| FR12.2 | View Active Tasks | DONE | adminController/operationsController; phase6; admin dashboard/Operations |
+| FR12.3 | View Bandwidth Usage | PARTIAL | Usage reports exist; aggregate bandwidth KPI on the primary admin dashboard is absent. |
+| FR12.4 | View Network Performance | PARTIAL | Node records/health monitoring exist; complete current network/performance dashboard indicators are incomplete. |
+| FR12.5 | View Suspicious Activity Alerts | DONE | adminController/operationsController; phase6; admin dashboard/Operations |
+| FR12.6 | View User Management Summary | DONE | adminController/operationsController; phase6; admin dashboard/Operations |
+| FR13.1 | View User List | DONE | adminController/adminRoutes; phase0/phase6 authorization; ManageUsers |
+| FR13.2 | View Node Records | DONE | adminController/adminRoutes; phase0/phase6 authorization; ManageUsers |
+| FR13.3 | View User Details | PARTIAL | Admin lists exist; individual-user detailed record workflow is absent. |
+| FR13.4 | Restrict User | PARTIAL | Audited blocking exists; distinct restricted-account state/workflow is absent. |
+| FR13.5 | Block User | DONE | adminController/adminRoutes; phase0/phase6 authorization; ManageUsers |
+| FR14.1 | View Pending Payments | DONE | operationsController/paymentService/reportService; phase5/phase6/phase8; production admin smoke |
+| FR14.2 | Verify Payments | DONE | operationsController/paymentService/reportService; phase5/phase6/phase8; production admin smoke |
+| FR14.3 | View Reports Summary | DONE | operationsController/paymentService/reportService; phase5/phase6/phase8; production admin smoke |
+| FR14.4 | Export Reports | DONE | operationsController/paymentService/reportService; phase5/phase6/phase8; production admin smoke |
+| FR14.5 | View Open Disputes | DONE | operationsController/paymentService/reportService; phase5/phase6/phase8; production admin smoke |
+| FR14.6 | Review Dispute | DONE | operationsController/paymentService/reportService; phase5/phase6/phase8; production admin smoke |
+| FR14.7 | Resolve Dispute | DONE | operationsController/paymentService/reportService; phase5/phase6/phase8; production admin smoke |
 
-| FR ID | Requirement | Business Rule | Backend | UI | Database | Real/Mock | E2E | Status | Missing Work | Priority |
-|---|---|---|---|---|---|---|---|---|---|---|
-| FR1.1 | System shall allow new user to create an account using email address or mobile number | Email/mobile must be unique | `POST /api/auth/register` — email+phone+name+role | Register.jsx ✅ | User model (email unique, phone stored) | Real | ✅ Yes | **DONE** | — | — |
-| FR1.2 | System shall allow user to enter password during registration and login | Must satisfy security policy | bcrypt salt 10, `isStrongPassword()` validation | Register.jsx, Login.jsx ✅ | passwordHash in User | Real | ✅ Yes | **DONE** | — | — |
-| FR1.3 | System shall allow user to select Node Participant, Platform Client, or Both during registration | User may hold multiple roles | Role stored in User.role enum | Register.jsx role dropdown ✅ | role field: node_participant/platform_client/both/admin | Real | ✅ Yes | **DONE** | — | — |
-| FR1.4 | System shall allow user to select OTP or email verification during account creation | Account activation requires successful verification | OTP generated (SHA-256 hashed), 10min expiry | VerifySignupOtp.jsx ✅ | signupOtpHash, signupOtpExpires | Real (no email delivery) | ⚠️ Partial | **PARTIAL** | OTP returned in response body only — no email service; must implement Nodemailer/SendGrid | P0 |
-| FR1.5 | System shall create new user account after successful validation of registration data | Incomplete/duplicate data shall be rejected | Validates email uniqueness, password strength, role, OTP verification | Register.jsx ✅ | User.isVerified set on OTP verify | Real | ✅ Yes | **DONE** | — | — |
-| FR1.6 | System shall allow verified user to log in using valid credentials | Only verified users may access protected features | `POST /api/auth/login` — checks isVerified, status=active | Login.jsx ✅ | isVerified check | Real | ✅ Yes | **DONE** | — | — |
+## Cross-cutting secure routing acceptance (SRS modules / Chapter 3)
 
----
+Reliable DataChannel authorization, GET/HEAD host/port restrictions, private/metadata/redirect rejection, Android VpnService/TUN code, duplicate guards and atomic settlement exist. Backend native WebRTC loopback performs a real HTTPS request and duplicate-result delivery with one settlement. It is **not** Android, residential egress, TUN forwarding, background/lock, VPN revoke, cellular handover or NAT-separated/TURN proof. Those gates remain BLOCKED/UNVERIFIED.
 
-## FR2.x — Profile and Role Management (Module M2)
+## Honest model and payment scope
 
-| FR ID | Requirement | Business Rule | Backend | UI | Database | Real/Mock | E2E | Status | Missing Work | Priority |
-|---|---|---|---|---|---|---|---|---|---|---|
-| FR2.1 | System shall display user's profile info: name, email, mobile, profile picture | Users see own profile only | `GET /api/users/profile` | Profile.jsx ✅ | User fields | Real | ✅ Yes | **DONE** | — | — |
-| FR2.2 | System shall allow users to update basic profile information | Updated data validated before saving | `PUT /api/users/profile` | Profile.jsx ✅ | User name/phone/profileImage | Real | ✅ Yes | **DONE** | — | — |
-| FR2.3 | System shall allow users to upload/change profile picture | Only supported image formats accepted | Field stored in User.profileImage as string | Profile.jsx (field exists) | profileImage string | MOCK_ONLY | ❌ No | **MOCK_ONLY** | No file upload endpoint, no storage (Cloudinary/S3/local) implemented | P1 |
-| FR2.4 | System shall display user's current active role | Role reflects stored config | Role returned in `GET /api/auth/me` | Profile.jsx ✅ | role field | Real | ✅ Yes | **DONE** | — | — |
-| FR2.5 | System shall allow eligible users to update/confirm selected role | Role changes affect access permissions | Role update via `PUT /api/users/profile` (no dedicated role-update endpoint) | Profile.jsx (limited) | role field | Partial | ⚠️ | **PARTIAL** | No dedicated role-change API with re-verification; role update happens alongside profile edit | P2 |
-| FR2.6 | System shall allow users to enable/disable participation preference | Only node-role users may configure | Participation settings via `PUT /api/node/settings` | NodeParticipation.jsx, NodeSettings screen (Flutter) | NodeDevice settings | Real | ✅ Yes | **DONE** | — | — |
-| FR2.7 | System shall allow users to update account security settings | User must be authenticated before changing | `PUT /api/users/change-password` | Profile.jsx ✅ | password bcrypt hashed | Real | ✅ Yes | **DONE** | — | — |
+Ranking uses existing synthetic/basic ML-assisted scoring only over eligible nodes, with bounded deterministic JS fallback. Live Python service health remains BLOCKED by missing runtime dependencies. Alerts are rules-v1, not ML fraud prediction. Manual admin payment verification is within SRS scope; acceptance proofs/account details/fulfilment are fixtures and do not prove real external cash transfer.
 
----
+## Interfaces, environment and constraints
 
-## FR3.x — Node Participation Dashboard (Module M3)
-
-| FR ID | Requirement | Business Rule | Backend | UI | Database | Real/Mock | E2E | Status | Missing Work | Priority |
-|---|---|---|---|---|---|---|---|---|---|---|
-| FR3.1 | Display current participation status (active/inactive) | Status reflects actual participation state | `GET /api/node/dashboard` — status field | NodeParticipation.jsx ✅, NodeDashboard.jsx (Flutter) ✅ | NodeDevice.status | Real | ✅ Yes | **DONE** | — | — |
-| FR3.2 | Allow Node Participants to define daily bandwidth usage limit | Participation shall not exceed configured limit | `PUT /api/node/settings` — bandwidthLimitMB | NodeParticipation.jsx ✅ | NodeDevice.bandwidthLimitMB | Real (stored, checked in allocation) | ✅ Yes | **DONE** | — | — |
-| FR3.3 | Allow Node Participants to define upload/download speed caps | Speed caps enforced during participation | `PUT /api/node/settings` — uploadSpeedCapMbps/downloadSpeedCapMbps | NodeParticipation.jsx ✅ | NodeDevice.uploadSpeedCapMbps/downloadSpeedCapMbps | STORED but not enforced at execution | ⚠️ | **PARTIAL** | Speed caps are stored but agent does not throttle actual HTTP requests to these caps | P1 |
-| FR3.4 | Allow Node Participants to define maximum concurrent tasks | System shall not assign more tasks than limit | `PUT /api/node/settings` — maxConcurrentTasks | NodeParticipation.jsx ✅ | NodeDevice.maxConcurrentTasks | Real (enforced in findAvailableNode) | ✅ Yes | **DONE** | — | — |
-| FR3.5 | Allow Node Participants to start device participation | Requires authenticated and available device | `POST /api/node/start` — sets status=active, creates ParticipationSession | NodeParticipation.jsx ✅ | NodeDevice.status, ParticipationSession | Real | ✅ Yes | **DONE** | — | — |
-| FR3.6 | Allow Node Participants to stop device participation | Running tasks safely handled before full stop | `POST /api/node/stop` — sets status=inactive, closes session | NodeParticipation.jsx ✅ | NodeDevice.status, ParticipationSession.status=stopped | Real (no task drain waiting) | ⚠️ | **PARTIAL** | Stop does not wait for in-progress tasks to complete gracefully before disconnecting | P1 |
-| FR3.7 | Display live activity: active tasks, bandwidth, speed, node health | Live metrics reflect current session data | `GET /api/node/session/current` (injects ±4ms latency noise) | NodeSession.jsx ✅, NodeDashboard screens | ParticipationSession, NodeDevice | PARTIAL — session latency has random ±4ms | ⚠️ | **PARTIAL** | Latency variation injected in `sessionController`: `Math.random() * 9 - 4` — simulated noise | P1 |
-| FR3.8 | Display credits earned by node participant during session/day | Credit display based on recorded contribution | `GET /api/node/session/current` — creditsEarned from ParticipationSession | NodeSession.jsx ✅ | ParticipationSession.creditsEarned | Real | ✅ Yes | **DONE** | — | — |
-
----
-
-## FR4.x — Session Monitoring Screen (Module M4)
-
-| FR ID | Requirement | Business Rule | Backend | UI | Database | Real/Mock | E2E | Status | Missing Work | Priority |
-|---|---|---|---|---|---|---|---|---|---|---|
-| FR4.1 | Display session metrics: active tasks, bandwidth used, credits earned | Session data = active or latest session | `GET /api/node/session/current` | NodeSession.jsx ✅ | ParticipationSession | Real | ✅ Yes | **DONE** | — | — |
-| FR4.2 | Display network metrics: latency, packet loss, stability, connection status | Metrics refreshed from monitoring data | Heartbeat/telemetry data via API | NodeSession.jsx ✅ | NodeHeartbeat, NodeTelemetry | Real (but latency has ±4ms noise) | ⚠️ | **PARTIAL** | sessionController injects `Math.random() * 9 - 4` ms noise into live latency reading | P1 |
-| FR4.3 | Display session-specific details: session ID, speed, region | Traceable to running task session | `GET /api/node/session/current` | NodeSession.jsx ✅ | ParticipationSession | Real | ✅ Yes | **DONE** | — | — |
-| FR4.4 | Allow Node Participant to pause active participation session | Paused sessions stop new task allocation | `PUT /api/node/pause` — sets NodeDevice.status=paused | NodeParticipation.jsx ✅ | NodeDevice.status=paused, ParticipationSession.status=paused | Real | ✅ Yes | **DONE** | — | — |
-| FR4.5 | Allow Node Participant to terminate active participation session | Active tasks safely closed/logged on termination | `POST /api/node/stop` | NodeParticipation.jsx ✅ | ParticipationSession.status=stopped | Real (no task drain) | ⚠️ | **PARTIAL** | Tasks may still be dispatched mid-stop without graceful drain | P1 |
-
----
-
-## FR5.x — Wallet / Earnings / Withdrawal (Module M5)
-
-| FR ID | Requirement | Business Rule | Backend | UI | Database | Real/Mock | E2E | Status | Missing Work | Priority |
-|---|---|---|---|---|---|---|---|---|---|---|
-| FR5.1 | Display user's available credit balance | Updated from recorded transactions | `GET /api/wallet` | NodeWallet.jsx ✅, ClientWallet.jsx ✅ | Wallet.balance | Real | ✅ Yes | **DONE** | — | — |
-| FR5.2 | Display earning-related information | Based on valid contribution records | `GET /api/wallet` + `GET /api/wallet/transactions` | NodeWallet.jsx ✅ | Wallet.earnedCredits, CreditTransaction | Real | ✅ Yes | **DONE** | — | — |
-| FR5.3 | Display user's recent wallet transactions | Includes both earned and spent | `GET /api/wallet/transactions` | NodeWallet.jsx ✅, ClientWallet.jsx ✅ | CreditTransaction | Real | ✅ Yes | **DONE** | — | — |
-| FR5.4 | Allow eligible users to submit a withdrawal request | Requires sufficient eligible balance | **NO API EXISTS** | **No withdrawal UI** | No withdrawal model | NOT_STARTED | ❌ No | **NOT_STARTED** | Need withdrawal request model, API, admin verification, status tracking | P0 |
-| FR5.5 | Allow users to choose a supported withdrawal method | Withdrawal methods limited to supported channels | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | NOT_STARTED | ❌ No | **NOT_STARTED** | Need withdrawal channel options (JazzCash, EasyPaisa, bank) | P0 |
-| FR5.6 | Allow users to provide withdrawal account details | Request not proceed without complete details | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | NOT_STARTED | ❌ No | **NOT_STARTED** | Need account details field in withdrawal model | P0 |
-
----
-
-## FR6.x — Client Dashboard (Module M6)
-
-| FR ID | Requirement | Business Rule | Backend | UI | Database | Real/Mock | E2E | Status | Missing Work | Priority |
-|---|---|---|---|---|---|---|---|---|---|---|
-| FR6.1 | Display number of active tasks for logged-in client | Only client's own task data shown | `GET /api/tasks/client/dashboard` — activeTasks count | ClientDashboard.jsx ✅ | TestingTask | Real | ✅ Yes | **DONE** | — | — |
-| FR6.2 | Display number of completed tasks | Based on stored task records | `GET /api/tasks/client/dashboard` — completedTasks count | ClientDashboard.jsx ✅ | TestingTask | Real | ✅ Yes | **DONE** | — | — |
-| FR6.3 | Display client's available credits or credit usage summary | Reflects current wallet records | `GET /api/tasks/client/dashboard` — availableCredits | ClientDashboard.jsx ✅ | Wallet | Real | ✅ Yes | **DONE** | — | — |
-| FR6.4 | Provide quick access to task submission screen | Only authorized platform clients | Navigation link in ClientDashboard | ClientDashboard.jsx ✅ | — | Real | ✅ Yes | **DONE** | — | — |
-| FR6.5 | Provide quick access to completed task results | Only client's own results | Navigation to MyTasks / TaskDetails | ClientDashboard.jsx ✅ | TestingTask, TaskResult | Real | ✅ Yes | **DONE** | — | — |
-| FR6.6 | Provide quick access to credit top-up process | Top-up depends on supported payment workflow | Navigation to ClientWallet | ClientDashboard.jsx ✅ (link exists) | — | PARTIAL (no real top-up) | ⚠️ | **PARTIAL** | Link exists but top-up workflow (proof upload, verification) not implemented | P0 |
-| FR6.7 | Display recent client task activity with status | Ordered from stored task history | `GET /api/tasks/my-tasks` | ClientDashboard.jsx shows recent tasks ✅ | TestingTask | Real | ✅ Yes | **DONE** | — | — |
-
----
-
-## FR7.x — Submit Testing Task (Module M7)
-
-| FR ID | Requirement | Business Rule | Backend | UI | Database | Real/Mock | E2E | Status | Missing Work | Priority |
-|---|---|---|---|---|---|---|---|---|---|---|
-| FR7.1 | Allow Platform Clients to enter target URL | URL must be valid before submission | URL validated via `isValidUrl()` in createTask | SubmitTask.jsx ✅ | TestingTask.targetUrl | Real | ✅ Yes | **DONE** | — | — |
-| FR7.2 | Allow Platform Clients to select service type | Must be one of supported platform services | serviceType validated; enum in TestingTask | SubmitTask.jsx ✅ (dropdown) | TestingTask.serviceType | Real | ✅ Yes | **DONE** | — | — |
-| FR7.3 | Allow Platform Clients to select target geographic region | Task execution depends on node availability in region | targetRegion field submitted and used in node selection | SubmitTask.jsx ✅ | TestingTask.targetRegion | Real | ✅ Yes | **DONE** | — | — |
-| FR7.4 | Allow Platform Clients to define execution frequency/limits | Execution limits within platform bounds | executionLimit field validated; no hard platform max defined | SubmitTask.jsx ✅ | TestingTask.executionLimit | Real | ✅ Yes | **PARTIAL** | No platform-level max execution limit enforcement | P2 |
-| FR7.5 | System shall create new testing task after validation | Task submission requires sufficient client credits | Credit check before task creation; enqueues task | SubmitTask.jsx ✅ | TestingTask (status=pending), Wallet deducted | Real | ✅ Yes | **DONE** | — | — |
-| FR7.6 | Allow users to clear entered task parameters before submission | Reset removes unsaved data only | Reset button in form | SubmitTask.jsx ✅ | — | UI only | ✅ Yes | **DONE** | — | — |
-| FR7.7 | Display estimated task cost before final submission | Based on selected task parameters | estimatedCost = executionLimit × 10 (hardcoded formula) | SubmitTask.jsx ✅ | TestingTask.estimatedCost | Real (formula-based) | ✅ Yes | **PARTIAL** | Cost formula is flat `executionLimit × 10`; not dynamic pricing as per FR-Module5 | P1 |
-| FR7.8 | Display whether selected region is available for task execution | Depends on active eligible nodes | No real-time region availability check | SubmitTask.jsx (static regions dropdown, no availability indicator) | NodeDevice by region | MOCK_ONLY | ❌ No | **MOCK_ONLY** | Need `GET /api/nodes/regions/availability` endpoint to show live region node counts | P1 |
-
----
-
-## FR8.x — Task Status / Results (Module M8)
-
-| FR ID | Requirement | Business Rule | Backend | UI | Database | Real/Mock | E2E | Status | Missing Work | Priority |
-|---|---|---|---|---|---|---|---|---|---|---|
-| FR8.1 | Display task info: ID, service type, region, nodes used, credits consumed | Only to owning client or admin | `GET /api/tasks/:id` | TaskDetails.jsx ✅ | TestingTask, TaskResult | Real | ✅ Yes | **DONE** | — | — |
-| FR8.2 | Display current status of a task | Status = one of defined task states | `GET /api/tasks/my-tasks`, `GET /api/tasks/:id` | MyTasks.jsx ✅, TaskDetails.jsx ✅ | TestingTask.status | Real | ✅ Yes | **DONE** | — | — |
-| FR8.3 | Display summarized task results: success rate, response time | Based on recorded task outcomes | `GET /api/tasks/:id` returns TaskResult | TaskDetails.jsx ✅ | TaskResult | Real | ✅ Yes | **DONE** | — | — |
-| FR8.4 | Allow users to download a report for a completed task | Only for completed/report-ready tasks | **NO REPORT EXPORT ENDPOINT** | No download button implemented | No report generation | NOT_STARTED | ❌ No | **NOT_STARTED** | Need report generation (PDF/JSON/CSV) and download endpoint | P1 |
-| FR8.5 | Allow clients to rate node performance after task completion | Only for completed tasks | **NO RATING API** | No rating UI | No rating field | NOT_STARTED | ❌ No | **NOT_STARTED** | Need `POST /api/tasks/:id/rate-node` and rating field on NodeDevice/TaskResult | P1 |
-
----
-
-## FR9.x — Top-Up Credits (Module M9)
-
-| FR ID | Requirement | Business Rule | Backend | UI | Database | Real/Mock | E2E | Status | Missing Work | Priority |
-|---|---|---|---|---|---|---|---|---|---|---|
-| FR9.1 | Allow users to enter top-up amount | Amount must meet minimum | **NOT IMPLEMENTED** (only admin `demo-credit` endpoint) | ClientWallet.jsx has no top-up form; NodeWallet.jsx same | No TopUp model | NOT_STARTED | ❌ No | **NOT_STARTED** | Need top-up request API, amount validation, min limit | P0 |
-| FR9.2 | Allow users to choose a supported payment method | Only supported methods available | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | NOT_STARTED | ❌ No | **NOT_STARTED** | Need payment method field and supported methods list | P0 |
-| FR9.3 | Allow users to provide payment transaction reference | Reference required for verification | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | NOT_STARTED | ❌ No | **NOT_STARTED** | Need reference number field in top-up request | P0 |
-| FR9.4 | Allow users to provide payment proof for manual verification | Proof must be submitted before verification | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | NOT_STARTED | ❌ No | **NOT_STARTED** | Need file upload for payment proof (screenshot/receipt) | P0 |
-| FR9.5 | System shall record credit top-up request for admin verification | Wallet balance NOT updated until verified | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | No TopUpRequest model | NOT_STARTED | ❌ No | **NOT_STARTED** | Need TopUpRequest model with status=pending/approved/rejected | P0 |
-| FR9.6 | Display verification status of submitted top-up request | Status reflects latest admin action | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | NOT_STARTED | ❌ No | **NOT_STARTED** | Need status display after submission | P0 |
-
----
-
-## FR10.x — Marketplace (Module M10)
-
-| FR ID | Requirement | Business Rule | Backend | UI | Database | Real/Mock | E2E | Status | Missing Work | Priority |
-|---|---|---|---|---|---|---|---|---|---|---|
-| FR10.1 | Display available marketplace products to authenticated users | Only active products shown | `GET /api/marketplace/products` (status=active filter) | Marketplace.jsx ✅, MarketplaceScreen.dart ✅ | MarketplaceProduct | Real | ✅ Yes | **DONE** | — | — |
-| FR10.2 | Display product name, description, required credits | Matches stored marketplace records | `GET /api/marketplace/products` | Marketplace.jsx ✅ | MarketplaceProduct.name/description/requiredCredits | Real | ✅ Yes | **DONE** | — | — |
-| FR10.3 | Provide redemption option for eligible items | Redemption requires sufficient credits | Order creation via `POST /api/marketplace/orders` | Marketplace.jsx ✅ (Buy button) | MarketplaceOrder | Real | ✅ Yes | **DONE** | — | — |
-
----
-
-## FR11.x — Order Confirmation (Module M11)
-
-| FR ID | Requirement | Business Rule | Backend | UI | Database | Real/Mock | E2E | Status | Missing Work | Priority |
-|---|---|---|---|---|---|---|---|---|---|---|
-| FR11.1 | Display selected product and required credits before confirmation | From active catalogue records | Product info passed to confirmation | Marketplace.jsx shows details ✅ | MarketplaceProduct | Real | ✅ Yes | **DONE** | — | — |
-| FR11.2 | Display user's available credit balance before confirmation | Reflects current wallet | `GET /api/wallet` | ClientWallet.jsx shows balance | Wallet | Real | ✅ Yes | **DONE** | — | — |
-| FR11.3 | Allow users to confirm marketplace redemption | Order confirmation requires sufficient balance | `POST /api/marketplace/orders` — checks balance | Marketplace.jsx ✅ Buy button | MarketplaceOrder, Wallet deducted | Real | ✅ Yes | **DONE** | — | — |
-| FR11.4 | Allow users to cancel before final confirmation | Cancellation shall not deduct credits | No dedicated cancel endpoint at confirmation stage; user just navigates away | No Cancel button on confirmation modal | — | PARTIAL | ⚠️ | **PARTIAL** | No explicit cancel API; need `DELETE /api/marketplace/orders/:id` for pre-payment cancel | P2 |
-| FR11.5 | Display current order status after redemption request | Traceable until fulfilment | `GET /api/marketplace/my-orders` | MyOrders.jsx ✅ | MarketplaceOrder.status | Real | ✅ Yes | **DONE** | — | — |
-
----
-
-## FR12.x — Admin Dashboard (Module M12)
-
-| FR ID | Requirement | Business Rule | Backend | UI | Database | Real/Mock | E2E | Status | Missing Work | Priority |
-|---|---|---|---|---|---|---|---|---|---|---|
-| FR12.1 | Display total registered users to administrator | Admin-only | `GET /api/admin/dashboard` — totalUsers | AdminDashboard.jsx ✅ | User count | Real | ✅ Yes | **DONE** | — | — |
-| FR12.2 | Display number of active tasks | Based on current task records | `GET /api/admin/dashboard` — activeTasks | AdminDashboard.jsx ✅ | TestingTask count | Real | ✅ Yes | **DONE** | — | — |
-| FR12.3 | Display overall bandwidth usage statistics | Derived from node activity | `GET /api/admin/dashboard` — (missing explicit BW aggregation) | AdminDashboard.jsx (limited) | NodeDevice.usedBandwidthMB | PARTIAL | ⚠️ | **PARTIAL** | Admin dashboard lacks total platform bandwidth aggregation from BandwidthUsage collection | P1 |
-| FR12.4 | Display system performance and network health indicators | Reflects current/recent monitoring data | `GET /api/admin/nodes` — latencyMs, status | AdminDashboard.jsx (basic) | NodeDevice, NodeHeartbeat | PARTIAL | ⚠️ | **PARTIAL** | No live Socket.IO updates in admin web frontend; no health charts | P1 |
-| FR12.5 | Display alerts for suspicious/abnormal platform activity | Generated from monitoring rules | **NOT IMPLEMENTED** — no AnomalyAlert model | Alerts.jsx (UI exists but likely no data) | No AnomalyAlert model | NOT_STARTED | ❌ No | **NOT_STARTED** | Need AnomalyAlert model, alert generation rules, admin alerts view | P0 |
-| FR12.6 | Provide quick access to managed user and node records | Admin actions traceable | Links to Users.jsx, Nodes.jsx | AdminDashboard.jsx ✅ | — | Real | ✅ Yes | **DONE** | — | — |
-
----
-
-## FR13.x — User and Node Management (Module M13)
-
-| FR ID | Requirement | Business Rule | Backend | UI | Database | Real/Mock | E2E | Status | Missing Work | Priority |
-|---|---|---|---|---|---|---|---|---|---|---|
-| FR13.1 | Display list of registered users to administrator | Only administrators may access | `GET /api/admin/users` (search, filter, paginate) | Users.jsx ✅ | User | Real | ✅ Yes | **DONE** | — | — |
-| FR13.2 | Display node-related details: health, activity status | Based on participation data | `GET /api/admin/nodes` | Nodes.jsx ✅ | NodeDevice | Real | ✅ Yes | **DONE** | — | — |
-| FR13.3 | Allow administrators to open detailed records for individual users | Limited to authorized admins | `GET /api/admin/users` (detailed per user possible) | Users.jsx (modal or detail view) | User | Real | ✅ Yes | **DONE** | — | — |
-| FR13.4 | Allow administrators to restrict suspicious user accounts | Restriction actions shall be logged | `PUT /api/admin/users/:id/block` (sets status=blocked, logs action) | Users.jsx ✅ | User.status, AdminLog | Real | ✅ Yes | **DONE** | — | — |
-| FR13.5 | Allow administrators to block user accounts | Blocking auditable and follows platform rules | `PUT /api/admin/users/:id/block` + AdminLog created | Users.jsx ✅ | User.status, AdminLog | Real | ✅ Yes | **DONE** | — | — |
-
----
-
-## FR14.x — Payments / Reports / Disputes (Module M14)
-
-| FR ID | Requirement | Business Rule | Backend | UI | Database | Real/Mock | E2E | Status | Missing Work | Priority |
-|---|---|---|---|---|---|---|---|---|---|---|
-| FR14.1 | Display pending top-up and withdrawal requests to administrator | Admin-only | **NOT IMPLEMENTED** (only demo-credit endpoint) | Payments.jsx (UI may exist but no data) | No TopUpRequest/Withdrawal model | NOT_STARTED | ❌ No | **NOT_STARTED** | Need TopUpRequest model, withdrawal model, pending list API | P0 |
-| FR14.2 | Allow administrators to approve/reject payment requests | Decision updates payment status | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | NOT_STARTED | ❌ No | **NOT_STARTED** | Need admin verify/reject API, wallet credit on approval | P0 |
-| FR14.3 | Display report-related information for admin review | Report data from stored system records | `GET /api/admin/dashboard` (partial) | Reports.jsx (UI may exist) | Various collections | PARTIAL | ⚠️ | **PARTIAL** | Report aggregation incomplete; no structured report view | P1 |
-| FR14.4 | Allow administrators to export reports | Exported reports reflect stored data | **NOT IMPLEMENTED** | Reports.jsx (likely no export button) | — | NOT_STARTED | ❌ No | **NOT_STARTED** | Need CSV/PDF export endpoint for transactions, tasks, usage | P1 |
-| FR14.5 | Display submitted disputes awaiting admin review | Only open/stored disputes visible | **NOT IMPLEMENTED** — no Dispute model | Disputes.jsx (UI may exist but no data) | No Dispute model | NOT_STARTED | ❌ No | **NOT_STARTED** | Need Dispute model, submission API, admin list API | P1 |
-| FR14.6 | Allow administrators to open and review dispute details | Dispute review actions traceable | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | NOT_STARTED | ❌ No | **NOT_STARTED** | Need dispute detail view and admin action endpoint | P1 |
-| FR14.7 | Allow administrators to record final decision for dispute case | Final dispute status stored | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | **NOT IMPLEMENTED** | NOT_STARTED | ❌ No | **NOT_STARTED** | Need dispute resolution endpoint with AdminLog entry | P1 |
-
----
-
-## Summary Count
-
-| Status | Count |
-|---|---|
-| DONE | 29 |
-| PARTIAL | 15 |
-| MOCK_ONLY | 2 |
-| NOT_STARTED | 18 |
-| BROKEN | 0 |
-| NOT_APPLICABLE | 0 |
-| **TOTAL** | **64** |
-
-**True end-to-end completion: 29/64 = ~45% of requirements fully working**
+The 32 official UI/SI/CI/OE/CON statements are included in NFR_AUDIT as separate interface/constraint checks; they must not inflate the 23 strict REL/USE/PER/SEC NFR denominator. Automatic safeguards and secure-routing module acceptance above remain release gates even where the screen-oriented FR tables do not assign a separate FR number.

@@ -1,0 +1,12 @@
+.payments-page { display: grid; gap: 1.5rem; }
+.payments-page section { display: grid; gap: .75rem; }
+.payment-request { padding: 1rem; border: 1px solid #dbe3ec; border-radius: .75rem; background: #fff; }
+.payment-actions { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin-top: .75rem; }
+.payment-actions label, .payment-form label { display: grid; gap: .3rem; }
+.payment-actions input, .payment-form input, .payment-form select { padding: .55rem; border: 1px solid #b8c6d5; border-radius: .4rem; }
+.payment-actions button, .payment-form button { padding: .6rem .9rem; border: 0; border-radius: .4rem; background: #1d4ed8; color: #fff; cursor: pointer; }
+.payment-actions button:disabled, .payment-form button:disabled { opacity: .55; cursor: not-allowed; }
+.payment-form { display: grid; gap: .7rem; margin: 1rem 0; }
+.payment-history { padding-left: 1.25rem; }
+.payment-error { color: #b91c1c; }
+.payment-panel { margin-bottom: 1.5rem; }

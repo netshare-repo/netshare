@@ -1,7 +1,9 @@
 import MarketplaceProduct from "../models/MarketplaceProduct.js";
 import MarketplaceOrder from "../models/MarketplaceOrder.js";
 import AdminLog from "../models/AdminLog.js";
-import { deductCredits, addCredits } from "../services/walletService.js";
+import { deductCredits } from "../services/walletService.js";
+import { changeOrderStatus } from '../services/orderStatusService.js';
+import { runTransaction } from '../lib/mongoTransaction.js';
 
 // ============================
 // USER / NODE PARTICIPANT APIs
@@ -62,43 +64,20 @@ export const createMarketplaceOrder = async (req, res) => {
       });
     }
 
-    const product = await MarketplaceProduct.findById(productId);
-
-    if (!product) {
-      return res.status(404).json({
-        message: "Product not found",
-      });
-    }
-
-    if (product.status !== "active") {
-      return res.status(400).json({
-        message: "Product is not available",
-      });
-    }
-
-    if (product.stock <= 0) {
-      return res.status(400).json({
-        message: "Product is out of stock",
-      });
-    }
-
-    await deductCredits({
-      userId: req.user._id,
-      taskId: null,
-      amount: product.requiredCredits,
-      description: `Marketplace purchase: ${product.name}`,
+    const order = await runTransaction(async session => {
+      const product = await MarketplaceProduct.findOneAndUpdate(
+        { _id: productId, status: 'active', stock: { $gt: 0 } },
+        { $inc: { stock: -1 } }, { new: true, session });
+      if (!product) throw Object.assign(new Error('Product unavailable or out of stock'), { status: 409 });
+      const [created] = await MarketplaceOrder.create([{
+        userId: req.user._id, productId: product._id, productName: product.name,
+        creditsSpent: product.requiredCredits, status: 'pending',
+      }], { session });
+      await deductCredits({ userId: req.user._id, amount: product.requiredCredits,
+        description: `Marketplace purchase: ${product.name}`,
+        idempotencyKey: `marketplace-purchase:${created._id}`, session });
+      return created;
     });
-
-    const order = await MarketplaceOrder.create({
-      userId: req.user._id,
-      productId: product._id,
-      productName: product.name,
-      creditsSpent: product.requiredCredits,
-      status: "pending",
-    });
-
-    product.stock -= 1;
-    await product.save();
 
     return res.status(201).json({
       message: "Marketplace order created successfully",
@@ -294,64 +273,15 @@ export const getAllMarketplaceOrders = async (req, res) => {
 // PUT /api/marketplace/admin/orders/:id/status
 export const updateOrderStatus = async (req, res) => {
   try {
-    const { status, fulfilmentNote } = req.body;
-
-    const allowedStatus = ["pending", "fulfilled", "cancelled", "rejected"];
-
-    if (!status || !allowedStatus.includes(status)) {
-      return res.status(400).json({
-        message: "Valid status is required",
-      });
-    }
-
-    const order = await MarketplaceOrder.findById(req.params.id);
-
-    if (!order) {
-      return res.status(404).json({
-        message: "Marketplace order not found",
-      });
-    }
-
-    order.status = status;
-    order.fulfilmentNote = fulfilmentNote || order.fulfilmentNote;
-
-    if (status === "fulfilled") {
-      order.fulfilledBy = req.user._id;
-      order.fulfilledAt = new Date();
-    } else if (status === "cancelled" || status === "rejected") {
-      // Process refund only once
-      if (!order.refundedAt) {
-        const wallet = await addCredits({
-          userId: order.userId,
-          amount: order.creditsSpent,
-          description: `Refund for marketplace order ${order._id} (${status})`,
-        });
-        
-        order.refundedAt = new Date();
-        order.refundedCredits = order.creditsSpent;
-        // Ideally we'd grab the newly created transaction ID here, 
-        // but addCredits doesn't return it currently. We can just set it to null or fetch it.
-        // We'll leave refundTransactionId empty since walletService handles the creation.
-      }
-    }
-
-    await order.save();
-
-    await AdminLog.create({
-      adminId: req.user._id,
-      action: "UPDATE_MARKETPLACE_ORDER",
-      details: `Admin updated marketplace order ${order._id} to ${status}`,
-      targetType: "system",
-      targetId: order._id,
-    });
+    const order = await changeOrderStatus(req.params.id, req.user._id, req.body?.status, req.body?.fulfilmentNote);
 
     return res.json({
       message: "Marketplace order status updated successfully",
       order,
     });
   } catch (error) {
-    return res.status(500).json({
-      message: "Failed to update marketplace order status",
+    return res.status(error.status || 500).json({
+      message: error.message,
       error: error.message,
     });
   }

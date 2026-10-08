@@ -42,6 +42,11 @@ const testingTaskSchema = new mongoose.Schema(
       required: true,
     },
 
+    pricingSnapshot: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+
     assignedNodeId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "NodeDevice",
@@ -69,6 +74,12 @@ const testingTaskSchema = new mongoose.Schema(
       averageResponseTimeMs: { type: Number, default: 0 },
       bandwidthConsumedMB: { type: Number, default: 0 },
       message: { type: String, default: "" },
+    },
+
+    clientRating: {
+      rating: { type: Number, min: 1, max: 5 },
+      comment: { type: String, maxlength: 500, default: "" },
+      ratedAt: { type: Date },
     },
   },
   { timestamps: true }

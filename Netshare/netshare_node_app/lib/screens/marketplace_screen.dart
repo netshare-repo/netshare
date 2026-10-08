@@ -136,7 +136,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.04),
+                                  color: Colors.black.withValues(alpha: 0.04),
                                   blurRadius: 12,
                                   offset: const Offset(0, 6),
                                 ),
@@ -148,7 +148,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                   width: 62,
                                   height: 62,
                                   decoration: BoxDecoration(
-                                    color: AppColors.primaryBlue.withOpacity(0.1),
+                                    color: AppColors.primaryBlue.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(18),
                                   ),
                                   child: Icon(

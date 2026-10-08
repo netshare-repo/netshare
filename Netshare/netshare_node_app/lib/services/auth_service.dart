@@ -1,5 +1,6 @@
 import '../core/constants/api_constants.dart';
 import 'api_service.dart';
+import 'foreground_node_service.dart';
 
 class AuthService {
   static Future<Map<String, dynamic>> register({
@@ -7,13 +8,14 @@ class AuthService {
     required String email,
     required String phone,
     required String password,
+    String role = 'node_participant',
   }) async {
     final data = await ApiService.post(ApiConstants.register, {
       'name': name,
       'email': email,
       'phone': phone,
       'password': password,
-      'role': 'node_participant',
+      'role': role,
     });
     return data;
   }
@@ -93,6 +95,7 @@ class AuthService {
   }
 
   static Future<void> logout() async {
+    await ForegroundNodeService.stop();
     await ApiService.clearToken();
   }
 }

@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import User from '../models/User.js';
 import { isStrongPassword, isValidPhone } from "../utils/validation.js";
 
 export const getProfile = async (req, res) => {
@@ -12,7 +13,7 @@ export const updateProfile = async (req, res) => {
     const { name, phone, profileImage } = req.body;
 
     if (name !== undefined) {
-      if (!name.trim()) {
+      if (typeof name !== 'string' || !name.trim() || name.length > 120) {
         return res.status(400).json({ message: "Name cannot be empty" });
       }
       req.user.name = name;
@@ -57,7 +58,8 @@ export const changePassword = async (req, res) => {
       });
     }
 
-    const isMatch = await bcrypt.compare(oldPassword, req.user.password);
+    const account = await User.findById(req.user._id).select('password');
+    const isMatch = typeof oldPassword === 'string' && account?.password && await bcrypt.compare(oldPassword, account.password);
     if (!isMatch) {
       return res.status(401).json({ message: "Incorrect old password" });
     }

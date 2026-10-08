@@ -24,7 +24,9 @@ router.get('/ready', async (req, res) => {
     config: config.isProduction ? (config.jwt.secret.length >= 32 ? 'valid' : 'weak_secret') : 'dev_mode',
   };
   
-  const isReady = checks.mongodb === 'connected';
+  const topology = mongoose.connection.client?.topology?.description?.type;
+  checks.transactions = ['ReplicaSetWithPrimary', 'Sharded'].includes(topology) ? 'available' : 'unavailable';
+  const isReady = checks.mongodb === 'connected' && (!config.isProduction || checks.transactions === 'available');
   
   res.status(isReady ? 200 : 503).json({
     status: isReady ? 'ready' : 'not_ready',

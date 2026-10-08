@@ -23,9 +23,25 @@ const supportsTransactions = () => {
  * Deduct credits from user wallet with atomic transaction.
  * Creates a CreditTransaction record in the same atomic operation.
  */
-export const deductCredits = async ({ userId, taskId = null, amount, description, idempotencyKey = null }) => {
-  if (amount <= 0) {
+export const deductCredits = async ({ userId, taskId = null, amount, description, idempotencyKey = null, session: externalSession = null }) => {
+  if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error('Amount must be greater than zero');
+  }
+
+  if (externalSession) {
+    if (idempotencyKey && await CreditTransaction.exists({ userId, idempotencyKey }).session(externalSession)) {
+      return Wallet.findOne({ userId }).session(externalSession);
+    }
+    const wallet = await Wallet.findOne({ userId }).session(externalSession);
+    if (!wallet) throw new Error('Wallet not found');
+    if (wallet.balance < amount) throw new Error('Insufficient wallet balance');
+    wallet.balance -= amount;
+    wallet.spentCredits += amount;
+    wallet.withdrawableCredits = Math.max(0, (wallet.withdrawableCredits || 0) - amount);
+    await wallet.save({ session: externalSession });
+    await CreditTransaction.create([{ userId, taskId, type: 'debit', amount, description,
+      status: 'completed', ...(idempotencyKey && { idempotencyKey }) }], { session: externalSession });
+    return wallet;
   }
 
   // Idempotency check
@@ -49,6 +65,7 @@ export const deductCredits = async ({ userId, taskId = null, amount, description
 
         wallet.balance -= amount;
         wallet.spentCredits += amount;
+        wallet.withdrawableCredits = Math.max(0, (wallet.withdrawableCredits || 0) - amount);
         await wallet.save({ session });
 
         await CreditTransaction.create([{
@@ -82,6 +99,7 @@ export const deductCredits = async ({ userId, taskId = null, amount, description
 
     wallet.balance -= amount;
     wallet.spentCredits += amount;
+    wallet.withdrawableCredits = Math.max(0, (wallet.withdrawableCredits || 0) - amount);
     await wallet.save();
 
     await CreditTransaction.create({
@@ -101,9 +119,24 @@ export const deductCredits = async ({ userId, taskId = null, amount, description
 /**
  * Add credits to user wallet with atomic transaction.
  */
-export const addCredits = async ({ userId, taskId = null, amount, description, idempotencyKey = null }) => {
-  if (amount <= 0) {
+export const addCredits = async ({ userId, taskId = null, amount, description, idempotencyKey = null, withdrawable = false, session: externalSession = null }) => {
+  if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error('Amount must be greater than zero');
+  }
+
+  if (externalSession) {
+    if (idempotencyKey && await CreditTransaction.exists({ userId, idempotencyKey }).session(externalSession)) {
+      return Wallet.findOne({ userId }).session(externalSession);
+    }
+    const wallet = await Wallet.findOne({ userId }).session(externalSession);
+    if (!wallet) throw new Error('Wallet not found');
+    wallet.balance += amount;
+    wallet.earnedCredits += amount;
+    if (withdrawable) wallet.withdrawableCredits = (wallet.withdrawableCredits || 0) + amount;
+    await wallet.save({ session: externalSession });
+    await CreditTransaction.create([{ userId, taskId, type: 'credit', amount, description,
+      status: 'completed', ...(idempotencyKey && { idempotencyKey }) }], { session: externalSession });
+    return wallet;
   }
 
   // Idempotency check
@@ -126,6 +159,7 @@ export const addCredits = async ({ userId, taskId = null, amount, description, i
 
         wallet.balance += amount;
         wallet.earnedCredits += amount;
+        if (withdrawable) wallet.withdrawableCredits = (wallet.withdrawableCredits || 0) + amount;
         await wallet.save({ session });
 
         await CreditTransaction.create([{
@@ -157,6 +191,7 @@ export const addCredits = async ({ userId, taskId = null, amount, description, i
 
     wallet.balance += amount;
     wallet.earnedCredits += amount;
+    if (withdrawable) wallet.withdrawableCredits = (wallet.withdrawableCredits || 0) + amount;
     await wallet.save();
 
     await CreditTransaction.create({

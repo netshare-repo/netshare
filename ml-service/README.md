@@ -1,6 +1,6 @@
 # 🧠 NetShare Machine Learning Node Ranking Service
 
-This service provides an intelligent node selection and ranking engine using **Random Forest Regression** trained on real-time node operational metrics.
+This service ranks nodes using a Random Forest regressor trained on synthetic examples. If scikit-learn is unavailable, it uses a deterministic analytical score. Live node metrics are inference inputs, not training data. Production prediction accuracy has not been established.
 
 ---
 
@@ -9,15 +9,15 @@ This service provides an intelligent node selection and ranking engine using **R
 In a decentralized testing network, assigning testing tasks to arbitrary or purely round-robin nodes results in high failure rates, artificial latency skew, and poor client satisfaction.
 
 This ML service analyzes 4 key telemetry vectors:
-1. **Latency (`latencyMs`)**: Network round-trip response time. **Lower latency is strictly better** (negative feature weight).
-2. **Bandwidth Availability (`bandwidthMB`)**: Unused quota remaining on the node device.
+1. **Latency (`latency`)**: Latest measured latency in milliseconds, or stored node latency. Missing values use a neutral 250 ms default.
+2. **Bandwidth Availability (`bandwidth`)**: Remaining quota in MB (`bandwidthLimitMB - usedBandwidthMB`).
 3. **Reliability Score (`reliability`)**: Historical uptime and availability score ($0-100\%$).
 4. **Success Rate (`successRate`)**: Historical ratio of successfully completed tasks ($0-100\%$).
 
 ### Model Architecture
 - **Model**: `RandomForestRegressor(n_estimators=100, max_depth=12, random_state=42)`
 - **Target**: Predicted Suitability Score in range $[0.0, 1.0]$.
-- **Evaluation**: Achieves $R^2 > 0.98$ and $MSE < 0.0005$ on benchmark validation sets.
+- **Evaluation**: The script prints holdout metrics from synthetic generated data. These do not measure accuracy on real residential task outcomes.
 
 ---
 

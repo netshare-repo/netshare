@@ -59,7 +59,7 @@ const taskResultSchema = new mongoose.Schema(
 
     packetLoss: {
       type: Number,
-      default: 0,
+      default: null,
     },
 
     bandwidthUsedMB: {
@@ -84,5 +84,9 @@ const taskResultSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Enforce exactly-once result persistence for a task on its assigned node,
+// including duplicate delivery handled by different backend processes.
+taskResultSchema.index({ taskId: 1, nodeId: 1 }, { unique: true });
 
 export default mongoose.model("TaskResult", taskResultSchema);

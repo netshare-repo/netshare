@@ -139,6 +139,30 @@
   color: #64748b;
 }
 
+.availability-indicator {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.availability-indicator.available {
+  color: #047857;
+}
+
+.availability-indicator.unavailable {
+  color: #b45309;
+}
+
+.availability-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
 .input-icon-box {
   position: relative;
 }

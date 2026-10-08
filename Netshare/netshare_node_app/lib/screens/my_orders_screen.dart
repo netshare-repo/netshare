@@ -60,7 +60,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
         border: Border.all(color: const Color(0xFFE5E7EB)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -72,7 +72,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
           Row(
             children: [
               CircleAvatar(
-                backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+                backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.1),
                 child: const Icon(
                   Icons.receipt_long_rounded,
                   color: AppColors.primaryBlue,
@@ -95,7 +95,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: statusColor(order.status).withOpacity(0.12),
+                  color: statusColor(order.status).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
@@ -132,7 +132,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
             Text(
               'Admin Note:',
               style: TextStyle(
-                color: AppColors.textMuted.withOpacity(0.9),
+                color: AppColors.textMuted.withValues(alpha: 0.9),
                 fontWeight: FontWeight.w700,
               ),
             ),

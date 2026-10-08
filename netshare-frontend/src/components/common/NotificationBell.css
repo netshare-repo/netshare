@@ -1,0 +1,8 @@
+.notification-control { position: relative; }
+.notification-control > button { display: flex; align-items: center; gap: 6px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #1e293b; cursor: pointer; }
+.notification-control > button span { background: #dc2626; color: white; border-radius: 12px; padding: 1px 6px; }
+.notification-panel { position: absolute; right: 0; top: 42px; width: min(360px, 85vw); max-height: 65vh; overflow: auto; padding: 16px; background: white; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 10px; box-shadow: 0 8px 24px #0002; z-index: 100; }
+.notification-panel article { padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
+.notification-panel article.unread { background: #eff6ff; }
+.notification-panel p { margin: 6px 0; overflow-wrap: anywhere; }
+.notification-panel button { margin: 5px; padding: 5px 8px; cursor: pointer; }

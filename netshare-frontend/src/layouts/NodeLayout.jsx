@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -10,7 +10,8 @@ import {
   Network,
   Cpu,
 } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/authState";
+import NotificationBell from '../components/common/NotificationBell';
 import { getNodeDashboard } from "../api/nodeApi";
 import StatusBadge from "../components/common/StatusBadge";
 import "./NodeLayout.css";
@@ -64,6 +65,7 @@ function NodeLayout({ children }) {
         </div>
 
         <nav className="node-nav">
+          <NavLink to="/disputes"><Activity size={19} /> Disputes</NavLink>
           <NavLink
             to="/node/dashboard"
             className={({ isActive }) => (isActive ? "active" : "")}
@@ -125,6 +127,7 @@ function NodeLayout({ children }) {
           </div>
 
           <div className="node-topbar-right">
+            <NotificationBell />
             <div className="node-status-indicator">
               <span className="node-device-name">
                 <Network size={15} />

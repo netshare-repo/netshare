@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Network, Eye, EyeOff } from "lucide-react";
 import axiosInstance from "../../api/axiosInstance";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/authState";
 import "./Login.css";
 
 function Login() {

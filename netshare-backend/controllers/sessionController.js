@@ -1,16 +1,22 @@
 import TaskSession from "../models/TaskSession.js";
 
+const canRead = (session, user) => user.role === 'admin' ||
+  String(session.clientId?._id || session.clientId) === String(user._id) ||
+  String(session.nodeId?.userId) === String(user._id);
+
 export const getSessionById = async (req, res) => {
   try {
     const session = await TaskSession.findById(req.params.id)
+      .select('-sessionToken')
       .populate("taskId")
       .populate("clientId", "name email")
-      .populate("nodeId");
+      .populate("nodeId", "userId deviceName region status");
 
     if (!session) {
       return res.status(404).json({ message: "Session not found" });
     }
 
+    if (!canRead(session, req.user)) return res.status(403).json({ message: 'Access denied' });
     return res.json({ session });
   } catch (error) {
     return res.status(500).json({
@@ -25,13 +31,15 @@ export const getSessionByTaskId = async (req, res) => {
     const session = await TaskSession.findOne({
       taskId: req.params.taskId,
     })
+      .select('-sessionToken')
       .populate("taskId")
-      .populate("nodeId");
+      .populate("nodeId", "userId deviceName region status");
 
     if (!session) {
       return res.status(404).json({ message: "Session not found" });
     }
 
+    if (!canRead(session, req.user)) return res.status(403).json({ message: 'Access denied' });
     return res.json({ session });
   } catch (error) {
     return res.status(500).json({

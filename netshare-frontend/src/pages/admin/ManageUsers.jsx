@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Search, RefreshCw, ShieldBan, ShieldCheck } from "lucide-react";
 import AdminLayout from "../../layouts/AdminLayout";
 import { getAdminUsers, blockUser, unblockUser } from "../../api/adminApi";
@@ -17,7 +17,7 @@ function ManageUsers() {
     isVerified: ""
   });
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -33,7 +33,7 @@ function ManageUsers() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
 
   const handleFilterChange = (e) => {
     setFilters({ ...filters, [e.target.name]: e.target.value });
@@ -64,8 +64,8 @@ function ManageUsers() {
   };
 
   useEffect(() => {
-    loadUsers();
-  }, [filters.role, filters.status, filters.isVerified]); // Reload when select filters change
+    void Promise.resolve().then(loadUsers);
+  }, [loadUsers]);
 
   return (
     <AdminLayout>

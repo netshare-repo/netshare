@@ -21,6 +21,8 @@ class InMemoryQueue extends EventEmitter {
   }
 
   async add(jobName, data, options = {}) {
+    const existing = this.jobs.find(job => String(job.data.taskId) === String(data.taskId));
+    if (existing) return existing;
     const job = {
       id: `mem_job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       name: jobName,
@@ -98,6 +100,8 @@ export const initTaskQueue = async () => {
     await redisClient.connect();
     redisConnection = redisClient;
     isRedisAvailable = true;
+    redisClient.on('close', () => { isRedisAvailable = false; });
+    redisClient.on('ready', () => { isRedisAvailable = true; });
 
     taskQueue = new Queue("task-queue", {
       connection: redisConnection,
@@ -137,12 +141,27 @@ export const enqueueTask = async (taskData) => {
   };
 
   if (isRedisAvailable && taskQueue) {
+    try {
+    const queued = (async () => {
+    const existing = await taskQueue.getJob(String(payload.taskId));
+    if (existing && ['failed', 'completed'].includes(await existing.getState())) await existing.remove();
     const job = await taskQueue.add("execute-testing-task", payload, {
+      jobId: String(payload.taskId),
       attempts: 3,
       backoff: { type: "exponential", delay: 3000 },
     });
     return { queueType: "redis-bullmq", jobId: job.id };
-  } else {
+    })();
+    let timer;
+    try { return await Promise.race([queued, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Redis queue timeout')), 2000);
+    })]); } finally { clearTimeout(timer); }
+    } catch {
+      // Mongo pending-work reconciliation and the atomic claim prevent replay.
+      isRedisAvailable = false;
+    }
+  }
+  {
     const job = await memoryQueue.add("execute-testing-task", payload, {
       attempts: 3,
     });

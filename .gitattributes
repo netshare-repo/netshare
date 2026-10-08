@@ -1,0 +1,2 @@
+# Mounted Linux bootstrap scripts must survive Windows checkouts unchanged.
+deployment/*.sh text eol=lf

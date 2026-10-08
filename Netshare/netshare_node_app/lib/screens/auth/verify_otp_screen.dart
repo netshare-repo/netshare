@@ -3,7 +3,7 @@ import '../../core/theme/app_theme.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
-import '../node_dashboard_screen.dart';
+import '../role_home_screen.dart';
 
 class VerifyOtpScreen extends StatefulWidget {
   final String email;
@@ -37,8 +37,8 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
 
       final role = data['user']?['role'];
 
-      if (role != 'node_participant' && role != 'both') {
-        showMessage('Only Node Participant can use this mobile app');
+      if (!['node_participant', 'platform_client', 'both'].contains(role)) {
+        showMessage('This account has no supported mobile role');
         await AuthService.logout();
         return;
       }
@@ -47,7 +47,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
 
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const NodeDashboardScreen()),
+        MaterialPageRoute(builder: (_) => const RoleHomeScreen()),
         (route) => false,
       );
     } catch (e) {

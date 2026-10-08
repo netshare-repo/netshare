@@ -6,6 +6,8 @@ import '../models/wallet_model.dart';
 import '../services/auth_service.dart';
 import '../services/node_service.dart';
 import '../services/wallet_service.dart';
+import '../services/client_api.dart';
+import '../widgets/notification_button.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/dashboard_card.dart';
 
@@ -18,7 +20,8 @@ import 'profile_screen.dart';
 import 'wallet_screen.dart';
 
 class NodeDashboardScreen extends StatefulWidget {
-  const NodeDashboardScreen({super.key});
+  final ClientApi? notificationApi;
+  const NodeDashboardScreen({super.key, this.notificationApi});
 
   @override
   State<NodeDashboardScreen> createState() => _NodeDashboardScreenState();
@@ -89,9 +92,10 @@ class _NodeDashboardScreenState extends State<NodeDashboardScreen> {
 
     if (!mounted) return;
 
-    Navigator.pushReplacement(
+    Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (_) => false,
     );
   }
 
@@ -147,6 +151,7 @@ class _NodeDashboardScreenState extends State<NodeDashboardScreen> {
           style: TextStyle(fontWeight: FontWeight.w900),
         ),
         actions: [
+          if (widget.notificationApi != null) NotificationButton(api: widget.notificationApi!),
           IconButton(
             onPressed: loadDashboard,
             icon: const Icon(Icons.refresh),
@@ -173,10 +178,10 @@ class _NodeDashboardScreenState extends State<NodeDashboardScreen> {
                         margin: const EdgeInsets.only(bottom: 14),
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: AppColors.dangerRed.withOpacity(0.08),
+                          color: AppColors.dangerRed.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: AppColors.dangerRed.withOpacity(0.25),
+                            color: AppColors.dangerRed.withValues(alpha: 0.25),
                           ),
                         ),
                         child: Text(

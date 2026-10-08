@@ -3,7 +3,7 @@ import '../core/theme/app_theme.dart';
 import '../services/auth_service.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
-import 'node_dashboard_screen.dart';
+import 'role_home_screen.dart';
 import 'register_screen.dart';
 import 'auth/forgot_password_screen.dart';
 
@@ -35,17 +35,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final role = data['user']?['role'];
 
-      if (role != 'node_participant' && role != 'both') {
-        showMessage('Only Node Participant can use this mobile app');
+      if (!['node_participant', 'platform_client', 'both'].contains(role)) {
+        showMessage('This account has no supported mobile role');
         await AuthService.logout();
         return;
       }
 
       if (!mounted) return;
 
-      Navigator.pushReplacement(
+      Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const NodeDashboardScreen()),
+        MaterialPageRoute(builder: (_) => const RoleHomeScreen()),
+        (_) => false,
       );
     } catch (e) {
       showMessage(e.toString().replaceAll('Exception:', '').trim());
@@ -81,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Welcome back to NetShare Node.',
+                'Welcome back to NetShare.',
                 style: TextStyle(
                   color: AppColors.textMuted,
                   fontSize: 16,

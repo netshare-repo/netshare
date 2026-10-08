@@ -106,7 +106,7 @@ class _WalletScreenState extends State<WalletScreen> {
                         child: Row(
                           children: [
                             CircleAvatar(
-                              backgroundColor: txColor(tx.type).withOpacity(0.12),
+                              backgroundColor: txColor(tx.type).withValues(alpha: 0.12),
                               child: Icon(
                                 tx.type == 'credit'
                                     ? Icons.add_rounded

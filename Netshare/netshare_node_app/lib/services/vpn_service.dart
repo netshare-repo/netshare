@@ -2,13 +2,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 /// Represents the status of the Android VpnService.
-enum VpnState {
-  disconnected,
-  connecting,
-  connected,
-  revoked,
-  unknown,
-}
+enum VpnState { disconnected, connecting, connected, revoked, unknown }
 
 /// Model for the detailed VPN status returned by the bridge.
 class VpnStatus {
@@ -59,10 +53,7 @@ class VpnEvent {
   final VpnState state;
   final String routingScope;
 
-  const VpnEvent({
-    required this.state,
-    required this.routingScope,
-  });
+  const VpnEvent({required this.state, required this.routingScope});
 
   factory VpnEvent.fromMap(Map<dynamic, dynamic> map) {
     return VpnEvent(
@@ -81,8 +72,9 @@ class VpnEvent {
 /// devices without unrestricted device proxying.
 class NetShareVpnBridge {
   static const MethodChannel _channel = MethodChannel('io.netshare.node/vpn');
-  static const EventChannel _eventChannel =
-      EventChannel('io.netshare.node/vpn_events');
+  static const EventChannel _eventChannel = EventChannel(
+    'io.netshare.node/vpn_events',
+  );
 
   static Stream<VpnEvent>? _eventStream;
 
@@ -102,8 +94,9 @@ class NetShareVpnBridge {
   /// Returns `true` if granted, `false` if denied or cancelled by user.
   static Future<bool> requestPermission() async {
     try {
-      final bool? result =
-          await _channel.invokeMethod<bool>('requestPermission');
+      final bool? result = await _channel.invokeMethod<bool>(
+        'requestPermission',
+      );
       return result ?? false;
     } on PlatformException catch (_) {
       return false;
@@ -121,15 +114,25 @@ class NetShareVpnBridge {
     String virtualIp = '10.254.1.2',
     String subnetRoute = '10.254.1.0',
     int prefixLength = 24,
+    String? routingSessionId,
+    String? authorizedHost,
+    int? authorizedPort,
+    String authorizedMethod = 'GET',
+    List<String> authorizedIps = const [],
   }) async {
     try {
-      final Map<dynamic, dynamic>? result =
-          await _channel.invokeMethod<Map<dynamic, dynamic>>('startService', {
-        'sessionName': sessionName,
-        'virtualIp': virtualIp,
-        'subnetRoute': subnetRoute,
-        'prefixLength': prefixLength,
-      });
+      final Map<dynamic, dynamic>? result = await _channel
+          .invokeMethod<Map<dynamic, dynamic>>('startService', {
+            'sessionName': sessionName,
+            'virtualIp': virtualIp,
+            'subnetRoute': subnetRoute,
+            'prefixLength': prefixLength,
+            'routingSessionId': routingSessionId,
+            'authorizedHost': authorizedHost,
+            'authorizedPort': authorizedPort,
+            'authorizedMethod': authorizedMethod,
+            'authorizedIps': authorizedIps,
+          });
       return Map<String, dynamic>.from(result ?? {});
     } on PlatformException catch (e) {
       throw Exception('Failed to start VpnService: ${e.message}');
@@ -139,8 +142,8 @@ class NetShareVpnBridge {
   /// Stop the NetShare VpnService.
   static Future<Map<String, dynamic>> stopService() async {
     try {
-      final Map<dynamic, dynamic>? result =
-          await _channel.invokeMethod<Map<dynamic, dynamic>>('stopService');
+      final Map<dynamic, dynamic>? result = await _channel
+          .invokeMethod<Map<dynamic, dynamic>>('stopService');
       return Map<String, dynamic>.from(result ?? {});
     } on PlatformException catch (e) {
       throw Exception('Failed to stop VpnService: ${e.message}');
@@ -150,8 +153,8 @@ class NetShareVpnBridge {
   /// Get current status of the VPN service and permission state.
   static Future<VpnStatus> getStatus() async {
     try {
-      final Map<dynamic, dynamic>? result =
-          await _channel.invokeMethod<Map<dynamic, dynamic>>('getStatus');
+      final Map<dynamic, dynamic>? result = await _channel
+          .invokeMethod<Map<dynamic, dynamic>>('getStatus');
       return VpnStatus.fromMap(result ?? {});
     } on PlatformException catch (_) {
       return const VpnStatus(
@@ -166,8 +169,8 @@ class NetShareVpnBridge {
   /// Get real-time TUN forwarding throughput metrics (packets/bytes in/out).
   static Future<Map<String, dynamic>> getTunMetrics() async {
     try {
-      final Map<dynamic, dynamic>? result =
-          await _channel.invokeMethod<Map<dynamic, dynamic>>('getTunMetrics');
+      final Map<dynamic, dynamic>? result = await _channel
+          .invokeMethod<Map<dynamic, dynamic>>('getTunMetrics');
       return Map<String, dynamic>.from(result ?? {});
     } on PlatformException catch (_) {
       return {
@@ -183,9 +186,9 @@ class NetShareVpnBridge {
 
   /// Stream of real-time VPN status changes (e.g. connected, revoked, disconnected).
   static Stream<VpnEvent> get eventStream {
-    _eventStream ??= _eventChannel
-        .receiveBroadcastStream()
-        .map((event) => VpnEvent.fromMap(Map<dynamic, dynamic>.from(event)));
+    _eventStream ??= _eventChannel.receiveBroadcastStream().map(
+      (event) => VpnEvent.fromMap(Map<dynamic, dynamic>.from(event)),
+    );
     return _eventStream!;
   }
 }

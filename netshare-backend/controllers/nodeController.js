@@ -7,10 +7,44 @@ import Wallet from "../models/Wallet.js";
 import NodeTelemetry from "../models/NodeTelemetry.js";
 import NodeHeartbeat from "../models/NodeHeartbeat.js";
 import BandwidthUsage from "../models/BandwidthUsage.js";
+import {
+  DEFAULT_CLIENT_REGIONS,
+  getRegionAvailability,
+} from "../services/regionAvailabilityService.js";
 import logger from '../lib/logger.js';
+import config from '../config/env.js';
 
 const generateSessionId = () =>
   `sess_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+
+/**
+ * GET /api/node/availability
+ * Live client-facing region capacity derived from nodes that can receive work now.
+ */
+export const getAvailableRegions = async (req, res) => {
+  try {
+    const requested = typeof req.query.regions === "string"
+      ? req.query.regions
+          .split(",")
+          .map((region) => region.trim())
+          .filter(Boolean)
+          .slice(0, 50)
+      : DEFAULT_CLIENT_REGIONS;
+    const regions = await getRegionAvailability(requested);
+
+    return res.json({
+      generatedAt: new Date().toISOString(),
+      eligibility:
+        "active + connected + free task slot + remaining bandwidth",
+      regions,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to fetch region availability",
+      error: error.message,
+    });
+  }
+};
 
 /**
  * Register a new node device for the authenticated user
@@ -126,8 +160,8 @@ export const getNodeDashboard = async (req, res) => {
       lifetimeCredits: wallet?.earnedCredits || wallet?.balance || 0,
       walletBalance: wallet?.balance || 0,
       reliabilityScore: node.reliabilityScore || 100,
-      successRate: node.successRate || 100,
-      latencyMs: node.latencyMs || null,
+      successRate: node.successRate ?? null,
+      latencyMs: node.latencyMs ?? null,
       device: {
         id: node._id,
         deviceName: node.deviceName,
@@ -264,8 +298,8 @@ export const startParticipation = async (req, res) => {
       bandwidthUsed: 0,
       bandwidthUsedMB: 0,
       latency: node.latencyMs || null,
-      packetLoss: 0,
-      networkQuality: "Good",
+      packetLoss: null,
+      networkQuality: "Not measured",
       activeTasksCount: node.currentActiveTasks || 0,
       creditsEarned: 0,
       status: "active",
@@ -518,7 +552,7 @@ export const getCurrentSession = async (req, res) => {
     }).sort({ createdAt: -1 });
 
     // If node is active but no session record exists, create one seamlessly
-    if (!session && node.status === "active") {
+    if (!config.isProduction && !session && node.status === "active") {
       session = await ParticipationSession.create({
         sessionId: generateSessionId(),
         userId: req.user._id,
@@ -527,8 +561,8 @@ export const getCurrentSession = async (req, res) => {
         startTime: new Date(),
         bandwidthUsed: 0,
         latency: node.latencyMs || null,
-        packetLoss: 0,
-        networkQuality: "Good",
+        packetLoss: null,
+        networkQuality: "Not measured",
         activeTasksCount: node.currentActiveTasks || 0,
         creditsEarned: 0,
         status: "active",
@@ -559,11 +593,12 @@ export const getCurrentSession = async (req, res) => {
       .populate("clientId", "name email");
 
     // Use actual stored latency from telemetry — no simulated noise
-    const currentLatency = node.latencyMs || null;
+    const currentLatency = node.latencyMs ?? null;
 
     // Assess network quality based on latency & packet loss
-    let quality = "Good";
-    if (currentLatency < 40) quality = "Excellent";
+    let quality = "Not measured";
+    if (currentLatency == null) quality = "Not measured";
+    else if (currentLatency < 40) quality = "Excellent";
     else if (currentLatency <= 90) quality = "Good";
     else if (currentLatency <= 140) quality = "Fair";
     else quality = "Poor";
@@ -578,7 +613,7 @@ export const getCurrentSession = async (req, res) => {
       assignedTask: assignedTaskSession || null,
       bandwidthConsumedMB: session.bandwidthUsed || session.bandwidthUsedMB || 0,
       latency: currentLatency,
-      packetLoss: session.packetLoss || 0,
+      packetLoss: session.packetLoss ?? null,
       networkQuality: quality,
       creditsGenerated: session.creditsEarned || 0,
       node: {

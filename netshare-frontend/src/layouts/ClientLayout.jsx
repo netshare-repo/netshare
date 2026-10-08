@@ -6,11 +6,11 @@ import {
   Wallet,
   LogOut,
   Network,
-  Bell,
   Store,
   ReceiptText,
 } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/authState";
+import NotificationBell from '../components/common/NotificationBell';
 import "./ClientLayout.css";
 
 function ClientLayout({ children }) {
@@ -36,6 +36,7 @@ function ClientLayout({ children }) {
         </div>
 
         <nav className="client-nav">
+          <NavLink to="/disputes"><ReceiptText size={19} /> Disputes</NavLink>
           <NavLink to="/client/dashboard">
             <LayoutDashboard size={19} />
             Dashboard
@@ -86,9 +87,7 @@ function ClientLayout({ children }) {
           </div>
 
           <div className="client-topbar-right">
-            <button className="client-bell">
-              <Bell size={19} />
-            </button>
+            <NotificationBell />
 
             <div className="client-user-pill">
               <div className="client-avatar">

@@ -20,6 +20,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final confirmPasswordController = TextEditingController();
 
   bool isLoading = false;
+  String role = 'node_participant';
 
   Future<void> register() async {
     final name = nameController.text.trim();
@@ -51,6 +52,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         email: email,
         phone: phone,
         password: password,
+        role: role,
       );
 
       if (!mounted) return;
@@ -82,7 +84,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Create Node Account'),
+        title: const Text('Create NetShare Account'),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -99,10 +101,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Create your Node Participant account.',
+                'Choose how you want to use NetShare.',
                 style: TextStyle(color: AppColors.textMuted),
               ),
               const SizedBox(height: 28),
+              DropdownButtonFormField<String>(initialValue: role, decoration: const InputDecoration(labelText: 'Account role'),
+                items: const [DropdownMenuItem(value: 'node_participant', child: Text('Node Participant')),
+                  DropdownMenuItem(value: 'platform_client', child: Text('Platform Client')), DropdownMenuItem(value: 'both', child: Text('Both'))],
+                onChanged: isLoading ? null : (value) => setState(() => role = value!)),
               CustomTextField(
                 controller: nameController,
                 label: 'Full Name',

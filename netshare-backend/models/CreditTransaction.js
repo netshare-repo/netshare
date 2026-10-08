@@ -37,12 +37,17 @@ const creditTransactionSchema = new mongoose.Schema(
     },
     idempotencyKey: {
       type: String,
-      index: true,
-      sparse: true,
-      default: null,
+      default: undefined,
     },
   },
   { timestamps: true }
+);
+
+// Only string keys participate, so legacy/null transactions remain valid while
+// duplicate financial operations are rejected at the database boundary.
+creditTransactionSchema.index(
+  { idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } }
 );
 
 export default mongoose.model("CreditTransaction", creditTransactionSchema);

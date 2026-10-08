@@ -2,12 +2,10 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Network, Eye, EyeOff } from "lucide-react";
 import axiosInstance from "../../api/axiosInstance";
-import { useAuth } from "../../context/AuthContext";
 import "./Register.css";
 
 function Register() {
   const navigate = useNavigate();
-  const { login } = useAuth();
 
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);

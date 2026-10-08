@@ -1,11 +1,11 @@
 {
   "name": "netshare-backend",
   "version": "1.0.0",
-  "description": "NetShare Phase-1 Backend Controlled Simulation",
+  "description": "NetShare secure routing control plane",
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "dev": "nodemon server.js",
+    "dev": "node --watch server.js",
     "start": "node server.js",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -28,7 +28,6 @@
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10",
     "supertest": "^7.3.0",
     "vitest": "^5.0.2"
   }

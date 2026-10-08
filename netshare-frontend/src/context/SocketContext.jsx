@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
+import { SocketContext } from './socketState';
 import { io } from "socket.io-client";
-import { useAuth } from "./AuthContext";
+import { useAuth } from "./authState";
 
-const SocketContext = createContext();
 
-const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_BACKEND_URL || (import.meta.env.PROD ? window.location.origin : "http://localhost:8000");
 
 export const SocketProvider = ({ children }) => {
   const { user } = useAuth();
@@ -23,8 +23,7 @@ export const SocketProvider = ({ children }) => {
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
-        setSocket(null);
-        setIsConnected(false);
+        queueMicrotask(() => { setSocket(null); setIsConnected(false); });
       }
       return;
     }
@@ -41,9 +40,9 @@ export const SocketProvider = ({ children }) => {
     });
 
     socketRef.current = socketInstance;
-    setSocket(socketInstance);
 
     socketInstance.on("connect", () => {
+      setSocket(socketInstance);
       setIsConnected(true);
     });
 
@@ -130,7 +129,3 @@ export const SocketProvider = ({ children }) => {
     </SocketContext.Provider>
   );
 };
-
-export const useSocket = () => useContext(SocketContext);
-
-export default SocketContext;

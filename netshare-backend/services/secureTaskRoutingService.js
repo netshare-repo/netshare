@@ -24,12 +24,15 @@ import {
   createRoutingSession,
   transitionRoutingSession,
   failRoutingSession,
+  authorizeSignalingEvent,
 } from './routingSessionService.js';
 import {
   createPeer,
+  createOffer,
+  setRemoteAnswer,
+  addRemoteIceCandidate,
   sendMessage,
   closePeer,
-  isDuplicateMessage,
 } from './webrtcPeerService.js';
 import {
   validateTarget,
@@ -39,9 +42,12 @@ import {
 import { calculateReward } from './rewardService.js';
 import { addCredits } from './walletService.js';
 import logger from '../lib/logger.js';
+import config from '../config/env.js';
+import { runTransaction } from '../lib/mongoTransaction.js';
+import { settleTaskResult } from './taskSettlementService.js';
 
 // Global settlement lock / set to prevent race conditions during duplicate settlement calls
-const settlingTasks = new Set();
+const androidRouteContexts = new Map();
 
 /**
  * Prepares and validates an authorized task envelope for dispatch.
@@ -65,9 +71,6 @@ export const prepareAuthorizedTaskSession = async ({ taskId, clientId, nodeId })
   // 1. Strict target security validation before dispatch
   const validation = await validateTarget(task.targetUrl);
   if (!validation.valid) {
-    task.status = 'failed';
-    task.resultSummary = { message: `Security validation rejected target: ${validation.reason}` };
-    await task.save();
     throw Object.assign(new Error(`Target security validation failed: ${validation.reason}`), {
       code: 'SECURITY_REJECTED',
       reason: validation.reason,
@@ -118,6 +121,166 @@ export const dispatchTaskOverDataChannel = async (routingSessionId, taskEnvelope
 };
 
 /**
+ * Starts the production Android execution path. Socket.IO is used only as the
+ * authenticated signaling carrier; task data and results are DataChannel-only.
+ */
+export const startAndroidSecureRouting = async ({ taskId, clientId, nodeId, emitToNode }) => {
+  const prepared = await prepareAuthorizedTaskSession({ taskId, clientId, nodeId });
+  const routingSessionId = prepared.session._id.toString();
+
+  const context = {
+    taskId: prepared.task._id.toString(),
+    nodeId: nodeId.toString(),
+    taskEnvelope: prepared.taskEnvelope,
+    authToken: prepared.authToken,
+    emitToNode,
+    completed: false,
+  };
+  androidRouteContexts.set(routingSessionId, context);
+
+  try {
+    createPeer(routingSessionId, {
+      onIceCandidate: ({ candidate, mid }) => {
+        emitToNode('secure_route:ice_candidate', {
+          routingSessionId,
+          candidate,
+          mid,
+        });
+      },
+      onOpen: async () => {
+        try {
+          const claimed = await TestingTask.findOneAndUpdate(
+            { _id: context.taskId, assignedNodeId: nodeId, status: 'assigned' },
+            { status: 'running' }
+          );
+          if (!claimed) {
+            await abortAndroidSecureRouting(routingSessionId, 'task_no_longer_assigned');
+            return;
+          }
+          await TaskSession.findOneAndUpdate(
+            { taskId: context.taskId },
+            {
+              status: 'running',
+              $push: { logs: { message: 'Android WebRTC DataChannel opened; secure task dispatched.' } },
+            }
+          );
+          await dispatchTaskOverDataChannel(routingSessionId, context.taskEnvelope);
+        } catch (error) {
+          await handleTaskFailure(routingSessionId, context.taskId, 'datachannel_dispatch_failed', error.message);
+          androidRouteContexts.delete(routingSessionId);
+        }
+      },
+      onMessage: async ({ msg }) => {
+        if (msg.type !== 'task_result') return;
+        try {
+          // Receipt acknowledgement is sent before settlement closes the peer.
+          await sendMessage(routingSessionId, 'ack', { receivedMsgId: msg.msgId });
+          const outcome = await settleTaskResult(routingSessionId, msg.payload);
+          context.completed = true;
+          emitToNode('secure_route:settled', {
+            routingSessionId,
+            taskId: context.taskId,
+            settled: outcome.settled,
+          });
+        } catch (error) {
+          await handleTaskFailure(routingSessionId, context.taskId, 'task_result_rejected', error.message);
+          emitToNode('secure_route:error', {
+            routingSessionId,
+            code: error.code || 'SETTLEMENT_FAILED',
+            message: error.message,
+          });
+        } finally {
+          androidRouteContexts.delete(routingSessionId);
+        }
+      },
+      onError: async (error) => {
+        if (context.completed || !androidRouteContexts.has(routingSessionId)) return;
+        await handleTaskFailure(
+          routingSessionId,
+          context.taskId,
+          error.code || 'webrtc_failure',
+          error.message || ''
+        );
+        androidRouteContexts.delete(routingSessionId);
+      },
+      onClose: async () => {
+        if (context.completed || !androidRouteContexts.has(routingSessionId)) return;
+        androidRouteContexts.delete(routingSessionId);
+        await handleTaskFailure(routingSessionId, context.taskId, 'datachannel_closed');
+      },
+    });
+
+    await transitionRoutingSession(routingSessionId, 'negotiating', {
+      reason: 'Backend offer created for Android secure node',
+      rotate: false,
+    });
+    const sdp = await createOffer(routingSessionId);
+    emitToNode('secure_route:offer', {
+      routingSessionId,
+      authToken: prepared.authToken,
+      sdp,
+      iceServers: config.webrtc.iceServers,
+    });
+
+    return { ...prepared, routingSessionId };
+  } catch (error) {
+    androidRouteContexts.delete(routingSessionId);
+    closePeer(routingSessionId, 'android_route_start_failed');
+    await handleTaskFailure(routingSessionId, context.taskId, 'webrtc_start_failed', error.message);
+    throw error;
+  }
+};
+
+export const acceptAndroidSecureAnswer = async ({ routingSessionId, authToken, sdp, nodeId }) => {
+  const context = androidRouteContexts.get(routingSessionId);
+  if (!context) throw Object.assign(new Error('Android route context not found'), { code: 'ROUTE_NOT_FOUND' });
+  await authorizeSignalingEvent(routingSessionId, authToken, { nodeId });
+  await setRemoteAnswer(routingSessionId, sdp);
+  const session = await RoutingSession.findById(routingSessionId);
+  if (session?.status === 'negotiating') {
+    await transitionRoutingSession(routingSessionId, 'active', {
+      reason: 'Android SDP answer applied',
+      rotate: false,
+    });
+  }
+};
+
+export const acceptAndroidSecureIceCandidate = async ({
+  routingSessionId,
+  authToken,
+  candidate,
+  mid,
+  nodeId,
+}) => {
+  if (!androidRouteContexts.has(routingSessionId)) {
+    throw Object.assign(new Error('Android route context not found'), { code: 'ROUTE_NOT_FOUND' });
+  }
+  await authorizeSignalingEvent(routingSessionId, authToken, { nodeId });
+  await addRemoteIceCandidate(routingSessionId, candidate, mid || '0');
+};
+
+export const abortAndroidSecureRouting = async (routingSessionId, reason = 'route_aborted') => {
+  const context = androidRouteContexts.get(routingSessionId);
+  if (!context) return false;
+  androidRouteContexts.delete(routingSessionId);
+  closePeer(routingSessionId, reason);
+  try {
+    await failRoutingSession(routingSessionId, reason, 'Secure Android route closed before completion');
+  } catch (_) {}
+  return true;
+};
+
+export const abortAndroidRoutesForNode = async (nodeId, reason = 'node_disconnected') => {
+  const matches = [...androidRouteContexts.entries()]
+    .filter(([, context]) => context.nodeId === nodeId.toString());
+  for (const [routingSessionId, context] of matches) {
+    androidRouteContexts.delete(routingSessionId);
+    await handleTaskFailure(routingSessionId, context.taskId, reason);
+  }
+  return matches.length;
+};
+
+/**
  * Handles incoming task_result message received via WebRTC DataChannel or signaling.
  * Enforces EXACTLY-ONCE settlement and TaskResult persistence.
  *
@@ -125,172 +288,7 @@ export const dispatchTaskOverDataChannel = async (routingSessionId, taskEnvelope
  * @param {object} resultPayload
  * @returns {Promise<{ taskResult: object, settled: boolean }>}
  */
-export const settleTaskResult = async (routingSessionId, resultPayload) => {
-  const {
-    taskId,
-    success = true,
-    statusCode = 200,
-    latencyMs = 50,
-    downloadSizeBytes = 0,
-    downloadBandwidthMB = 0.05,
-    bandwidthUsedMB = 0.05,
-    uploadBandwidthMB = 0.01,
-    packetLoss = 0,
-    successRate = 100,
-    resultData = {},
-  } = resultPayload || {};
-
-  if (!taskId) {
-    throw Object.assign(new Error('Missing taskId in task result payload'), { code: 'INVALID_RESULT' });
-  }
-
-  const taskIdStr = taskId.toString();
-
-  // Concurrency guard: avoid double settlement in race conditions
-  if (settlingTasks.has(taskIdStr)) {
-    logger.warn({ taskId: taskIdStr }, 'Task settlement already in progress — ignoring concurrent call');
-    const existing = await TaskResult.findOne({ taskId: taskIdStr });
-    return { taskResult: existing, settled: false };
-  }
-
-  settlingTasks.add(taskIdStr);
-
-  try {
-    // 1. Idempotency Check: if TaskResult already exists for this task, do not re-settle
-    const existingResult = await TaskResult.findOne({ taskId: taskIdStr });
-    if (existingResult) {
-      logger.info({ taskId: taskIdStr }, 'TaskResult already exists — duplicate settlement ignored');
-      return { taskResult: existingResult, settled: false };
-    }
-
-    // 2. Verify task state
-    const task = await TestingTask.findById(taskIdStr);
-    if (!task) {
-      throw Object.assign(new Error(`Task ${taskIdStr} not found`), { code: 'TASK_NOT_FOUND' });
-    }
-
-    if (['completed', 'settled'].includes(task.status)) {
-      logger.warn({ taskId: taskIdStr, status: task.status }, 'Task already completed or settled — ignoring');
-      const existing = await TaskResult.findOne({ taskId: taskIdStr });
-      return { taskResult: existing, settled: false };
-    }
-
-    // 3. Verify RoutingSession
-    let session = null;
-    if (routingSessionId) {
-      session = await RoutingSession.findById(routingSessionId);
-    }
-    const nodeId = session?.nodeId || task.assignedNodeId;
-    const node = await NodeDevice.findById(nodeId);
-    if (!node) {
-      throw Object.assign(new Error(`Node ${nodeId} not found`), { code: 'NODE_NOT_FOUND' });
-    }
-
-    const safeBandwidth = Number(bandwidthUsedMB || downloadBandwidthMB || 0.05);
-    const safeLatency = Number(latencyMs || 50);
-
-    // 4. Create immutable TaskResult
-    const taskResult = await TaskResult.create({
-      taskId: task._id,
-      nodeId: node._id,
-      clientId: task.clientId,
-      nodeUserId: node.userId,
-      serviceType: task.serviceType,
-      targetUrl: task.targetUrl,
-      success: !!success,
-      successRate: Number(successRate || (success ? 100 : 0)),
-      latencyMs: safeLatency,
-      packetLoss: Number(packetLoss || 0),
-      bandwidthUsedMB: safeBandwidth,
-      statusCode: Number(statusCode || 200),
-      resultData: resultData || {},
-      completedAt: new Date(),
-    });
-
-    // 5. Calculate dynamic reward and atomically add credits
-    const rewardCalculation = calculateReward({
-      bandwidthUsedMB: safeBandwidth,
-      node,
-      targetRegion: task.targetRegion,
-    });
-    const finalReward = Math.max(1, rewardCalculation.reward);
-
-    await addCredits({
-      userId: node.userId,
-      taskId: task._id,
-      amount: finalReward,
-      description: `Task reward for ${task._id} (${safeBandwidth}MB via real controlled routing)`,
-    });
-
-    // 6. Record BandwidthUsage ledger
-    await BandwidthUsage.create({
-      nodeId: node._id,
-      taskId: task._id,
-      sessionId: routingSessionId || '',
-      uploadBandwidthMB: Number(uploadBandwidthMB || 0.01),
-      downloadBandwidthMB: safeBandwidth,
-      totalBandwidthMB: Number(uploadBandwidthMB || 0.01) + safeBandwidth,
-      networkAvailability: 'available',
-      timestamp: new Date(),
-    });
-
-    // 7. Update Task state
-    task.status = 'settled';
-    task.resultSummary = {
-      successRate: Number(successRate || 100),
-      averageResponseTimeMs: safeLatency,
-      bandwidthConsumedMB: safeBandwidth,
-      message: `Executed via secure controlled path by node ${node.deviceName}. Reward: ${finalReward} credits.`,
-    };
-    await task.save();
-
-    // 8. Update TaskSession if present
-    await TaskSession.findOneAndUpdate(
-      { taskId: task._id },
-      {
-        status: 'completed',
-        bandwidthUsedMB: safeBandwidth,
-        latencyMs: safeLatency,
-        $push: {
-          logs: {
-            message: `Secure routing task completed. Dynamic reward: ${finalReward} credits.`,
-          },
-        },
-      }
-    );
-
-    // 9. Transition RoutingSession to completed and tear down peer resources
-    if (session && session.status !== 'completed') {
-      try {
-        if (session.status === 'created') {
-          await transitionRoutingSession(session._id, 'negotiating', { reason: 'Negotiation started' });
-          await transitionRoutingSession(session._id, 'active', { reason: 'Channel active' });
-        } else if (session.status === 'negotiating') {
-          await transitionRoutingSession(session._id, 'active', { reason: 'Channel active' });
-        }
-        await transitionRoutingSession(session._id, 'completed', {
-          reason: 'Task executed and settled successfully',
-          rotate: false,
-        });
-      } catch (e) {
-        logger.warn({ routingSessionId, err: e.message }, 'RoutingSession transition to completed warning');
-      }
-      closePeer(session._id.toString(), 'task_settled_cleanly');
-    }
-
-    // 10. Decrement active tasks count on node
-    await NodeDevice.findByIdAndUpdate(node._id, {
-      $inc: { currentActiveTasks: -1 },
-      status: 'active',
-      lastSeenAt: new Date(),
-    });
-
-    logger.info({ taskId: taskIdStr, reward: finalReward, routingSessionId }, 'Task settled exactly once');
-    return { taskResult, settled: true };
-  } finally {
-    settlingTasks.delete(taskIdStr);
-  }
-};
+export { settleTaskResult } from './taskSettlementService.js';
 
 /**
  * Handles task failure cleanly, ensuring resources are freed and status is recorded.
@@ -301,35 +299,50 @@ export const settleTaskResult = async (routingSessionId, resultPayload) => {
  * @param {string} [detail]
  */
 export const handleTaskFailure = async (routingSessionId, taskId, reason, detail = '') => {
-  if (taskId) {
-    try {
-      await TestingTask.findByIdAndUpdate(taskId, {
-        status: 'failed',
-        resultSummary: { message: `Task failed: ${reason}. ${detail}` },
-      });
-      await TaskSession.findOneAndUpdate(
-        { taskId },
-        {
-          status: 'failed',
-          $push: { logs: { message: `Task failed: ${reason}. ${detail}` } },
-        }
-      );
-    } catch (e) {
-      logger.error({ taskId, err: e.message }, 'Error marking task failed');
-    }
-  }
-
-  if (routingSessionId) {
-    try {
-      await failRoutingSession(routingSessionId, reason, detail);
-    } catch (_) {}
-    closePeer(routingSessionId, `task_failure: ${reason}`);
+  try {
+    await runTransaction(async transaction => {
+      const task = taskId ? await TestingTask.findById(taskId).session(transaction) : null;
+      const route = routingSessionId ? await RoutingSession.findById(routingSessionId).session(transaction) : null;
+      // Terminal states are immutable; late failure/duplicate events do not
+      // release another task's capacity or overwrite a successful settlement.
+      if (!task || !['assigned', 'running'].includes(task.status)) return;
+      if (route && (String(route.taskId) !== String(task._id) ||
+        String(route.nodeId) !== String(task.assignedNodeId))) return;
+      task.status = 'failed';
+      task.resultSummary = { message: `Task failed: ${reason}. ${detail}` };
+      await task.save({ session: transaction });
+      await TaskSession.updateOne({ taskId }, { $set: { status: 'failed' },
+        $push: { logs: { message: task.resultSummary.message } } }, { session: transaction });
+      if (route && !['completed', 'failed', 'expired'].includes(route.status)) {
+        const previous = route.status;
+        route.status = 'failed';
+        route.endedAt = new Date();
+        route.closeReason = reason === 'node_disconnected' ? reason : 'task_failed';
+        route.failureDetail = reason;
+        route.stateHistory.push({ from: previous, to: 'failed', reason, timestamp: new Date() });
+        await route.save({ session: transaction });
+      }
+      const node = await NodeDevice.findById(task.assignedNodeId).session(transaction);
+      if (node) {
+        node.currentActiveTasks = Math.max(0, node.currentActiveTasks - 1);
+        if (['active', 'busy'].includes(node.status)) node.status =
+          node.currentActiveTasks >= node.maxConcurrentTasks ? 'busy' : 'active';
+        await node.save({ session: transaction });
+      }
+    });
+  } finally {
+    if (routingSessionId) closePeer(String(routingSessionId), `task_failure: ${reason}`);
   }
 };
 
 export default {
   prepareAuthorizedTaskSession,
   dispatchTaskOverDataChannel,
+  startAndroidSecureRouting,
+  acceptAndroidSecureAnswer,
+  acceptAndroidSecureIceCandidate,
+  abortAndroidSecureRouting,
+  abortAndroidRoutesForNode,
   settleTaskResult,
   handleTaskFailure,
 };

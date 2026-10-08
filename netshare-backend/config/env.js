@@ -84,6 +84,7 @@ const config = Object.freeze({
     password: process.env.REDIS_PASSWORD || undefined,
   },
   mlServiceUrl: process.env.ML_SERVICE_URL || 'http://localhost:5001',
+  mlTimeoutMs: Math.min(5000, Math.max(100, parseInt(process.env.ML_TIMEOUT_MS || '750', 10) || 750)),
   logLevel: process.env.LOG_LEVEL || (isProduction ? 'info' : 'debug'),
   webrtc: {
     // W3C RTCIceServer format (for Flutter clients / browser)

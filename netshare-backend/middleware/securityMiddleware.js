@@ -82,8 +82,22 @@ export const validateTaskSubmission = (req, res, next) => {
     });
   }
 
+  const supportedServices = [
+    "ad_verification",
+    "accessibility_testing",
+    "localization_testing",
+    "performance_testing",
+  ];
+  if (!supportedServices.includes(serviceType)) {
+    return res.status(400).json({ message: "Unsupported service type" });
+  }
+
+  if (typeof targetRegion !== "string" || !targetRegion.trim() || targetRegion.length > 80) {
+    return res.status(400).json({ message: "Target region must be between 1 and 80 characters" });
+  }
+
   const limitNum = Number(executionLimit);
-  if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
+  if (!Number.isInteger(limitNum) || limitNum < 1 || limitNum > 100) {
     return res.status(400).json({
       message: "Execution limit must be a positive integer between 1 and 100",
     });

@@ -123,29 +123,25 @@ export const validateTarget = async (targetUrl, options = {}) => {
     return { valid: true, resolvedIp: hostname };
   }
   
-  // 6. DNS resolution — resolve hostname and validate resolved IP
+  // 6. DNS resolution — validate every address and fail closed. Allowing an
+  // unresolved hostname would turn transient DNS failures into an SSRF bypass.
   try {
-    const addresses = await dns.resolve4(hostname);
+    const addresses = await dns.lookup(hostname, { all: true, verbatim: true });
     if (!addresses || addresses.length === 0) {
-      return { valid: false, reason: 'DNS resolution failed. No A records found.' };
+      return { valid: false, reason: 'DNS resolution failed. No addresses found.' };
     }
-    
-    const resolvedIp = addresses[0];
-    
-    if (isPrivateIPv4(resolvedIp)) {
-      logger.warn({ hostname, resolvedIp }, 'DNS rebinding attempt detected: hostname resolves to private IP');
-      return { valid: false, reason: 'Hostname resolves to a private/reserved IP address. This may be a DNS rebinding attack.' };
+
+    for (const { address } of addresses) {
+      if (isPrivateIPv4(address) || isBlockedIPv6(address) || BLOCKED_EXACT_IPS.includes(address)) {
+        logger.warn({ hostname, resolvedIp: address }, 'DNS rebinding attempt detected: hostname resolves to blocked IP');
+        return { valid: false, reason: 'Hostname resolves to a private/reserved IP address. This may be a DNS rebinding attack.' };
+      }
     }
-    
-    if (BLOCKED_EXACT_IPS.includes(resolvedIp)) {
-      return { valid: false, reason: 'Hostname resolves to a blocked IP address.' };
-    }
-    
-    return { valid: true, resolvedIp };
+
+    return { valid: true, resolvedIp: addresses[0].address };
   } catch (dnsErr) {
-    // If DNS resolution fails, still allow (could be an IPv6-only host or DNS timeout)
-    logger.warn({ hostname, err: dnsErr.message }, 'DNS resolution warning — proceeding with caution');
-    return { valid: true, resolvedIp: 'unresolved' };
+    logger.warn({ hostname, err: dnsErr.message }, 'DNS resolution failed — target rejected');
+    return { valid: false, reason: `DNS resolution failed: ${dnsErr.code || dnsErr.message}` };
   }
 };
 
@@ -170,7 +166,14 @@ export const validateRedirect = async (originalUrl, redirectLocation, options = 
     return { valid: false, reason: 'Invalid redirect URL format.' };
   }
 
-  const validation = await validateTarget(resolvedRedirect, options);
+  const validation = options.authorizedHost || options.authorizedPort
+    ? await validateTaskExecutionTarget({
+        targetUrl: resolvedRedirect,
+        authorizedHost: options.authorizedHost,
+        authorizedPort: options.authorizedPort,
+        authorizedMethod: options.authorizedMethod || 'GET',
+      })
+    : await validateTarget(resolvedRedirect, options);
   if (!validation.valid) {
     return {
       valid: false,
@@ -248,4 +251,3 @@ export default {
   validateTaskExecutionTarget,
   ALLOWED_DEFAULT_PORTS,
 };
-

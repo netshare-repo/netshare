@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_theme.dart';
 import '../services/api_service.dart';
 import 'login_screen.dart';
-import 'node_dashboard_screen.dart';
+import 'role_home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -27,7 +27,7 @@ class _SplashScreenState extends State<SplashScreen> {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (_) => token == null ? const LoginScreen() : const NodeDashboardScreen(),
+        builder: (_) => token == null ? const LoginScreen() : const RoleHomeScreen(),
       ),
     );
   }

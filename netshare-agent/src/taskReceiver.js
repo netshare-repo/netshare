@@ -18,7 +18,13 @@ export class TaskReceiver {
       return { valid: false, error: "Empty task payload received" };
     }
 
-    const { taskId, target, taskType, serviceType, limits } = taskPayload;
+    const {
+      taskId,
+      target,
+      authorizedHost,
+      authorizedPort,
+      authorizedMethod = 'GET',
+    } = taskPayload;
 
     if (!taskId) {
       return { valid: false, error: "Missing required taskId" };
@@ -33,6 +39,18 @@ export class TaskReceiver {
       const parsed = new URL(target);
       if (!["http:", "https:"].includes(parsed.protocol)) {
         return { valid: false, error: `Unauthorized URL protocol: ${parsed.protocol}` };
+      }
+      const effectivePort = parsed.port
+        ? Number(parsed.port)
+        : parsed.protocol === 'https:' ? 443 : 80;
+      if (!authorizedHost || parsed.hostname.toLowerCase() !== authorizedHost.toLowerCase()) {
+        return { valid: false, error: 'Missing or mismatched authorized host' };
+      }
+      if (!authorizedPort || effectivePort !== Number(authorizedPort)) {
+        return { valid: false, error: 'Missing or mismatched authorized port' };
+      }
+      if (!['GET', 'HEAD'].includes(authorizedMethod.toUpperCase())) {
+        return { valid: false, error: `Unauthorized HTTP method: ${authorizedMethod}` };
       }
     } catch (e) {
       return { valid: false, error: `Malformed target URL: ${target}` };

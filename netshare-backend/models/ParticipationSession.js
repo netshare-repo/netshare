@@ -76,13 +76,13 @@ const participationSessionSchema = new mongoose.Schema(
 
     packetLoss: {
       type: Number,
-      default: 0,
+      default: null,
     },
 
     networkQuality: {
       type: String,
-      enum: ["Excellent", "Good", "Fair", "Poor"],
-      default: "Good",
+      enum: ["Excellent", "Good", "Fair", "Poor", "Not measured"],
+      default: "Not measured",
     },
 
     activeTasksCount: {

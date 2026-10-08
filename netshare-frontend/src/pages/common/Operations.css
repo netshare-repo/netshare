@@ -1,0 +1,11 @@
+.operations-page { max-width: 1050px; color: #1e293b; }
+.operations-page nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.operations-page article, .operations-page form { margin: 16px 0; padding: 18px; background: white; border: 1px solid #cbd5e1; border-radius: 10px; overflow-wrap: anywhere; }
+.operations-page label { display: inline-flex; flex-direction: column; gap: 6px; margin: 8px; }
+.operations-page form label { display: flex; }
+.operations-page input, .operations-page select, .operations-page textarea { padding: 8px; border: 1px solid #94a3b8; border-radius: 5px; }
+.operations-page textarea { min-width: min(350px, 65vw); min-height: 80px; }
+.operations-page button { padding: 8px 12px; margin: 5px; cursor: pointer; border-radius: 5px; border: 1px solid #94a3b8; background: #eff6ff; color: #1e3a8a; }
+.operations-page button:disabled { opacity: .5; cursor: default; }
+.operations-page pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.operations-page [role=alert] { color: #b91c1c; }

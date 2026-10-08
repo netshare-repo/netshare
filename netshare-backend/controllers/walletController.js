@@ -1,6 +1,7 @@
 import Wallet from "../models/Wallet.js";
 import CreditTransaction from "../models/CreditTransaction.js";
 import { addCredits } from "../services/walletService.js";
+import { eligibleWithdrawalBalance } from "../services/paymentService.js";
 
 export const getWallet = async (req, res) => {
   try {
@@ -10,7 +11,7 @@ export const getWallet = async (req, res) => {
       return res.status(404).json({ message: "Wallet not found" });
     }
 
-    return res.json({ wallet });
+    return res.json({ wallet, eligibleWithdrawalBalance: eligibleWithdrawalBalance(wallet) });
   } catch (error) {
     return res.status(500).json({
       message: "Failed to fetch wallet",

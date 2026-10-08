@@ -38,7 +38,7 @@ class ApiService {
     final response = await http.get(
       Uri.parse(ApiConstants.baseUrl + endpoint),
       headers: await _headers(auth: auth),
-    );
+    ).timeout(const Duration(seconds: 20));
 
     return _handleResponse(response);
   }
@@ -52,7 +52,7 @@ class ApiService {
       Uri.parse(ApiConstants.baseUrl + endpoint),
       headers: await _headers(auth: auth),
       body: jsonEncode(body),
-    );
+    ).timeout(const Duration(seconds: 20));
 
     return _handleResponse(response);
   }
@@ -66,20 +66,20 @@ class ApiService {
       Uri.parse(ApiConstants.baseUrl + endpoint),
       headers: await _headers(auth: auth),
       body: jsonEncode(body),
-    );
+    ).timeout(const Duration(seconds: 20));
 
     return _handleResponse(response);
   }
 
   static Map<String, dynamic> _handleResponse(http.Response response) {
-    final data = response.body.isNotEmpty
-        ? jsonDecode(response.body) as Map<String, dynamic>
-        : <String, dynamic>{};
+    Map<String, dynamic> data;
+    try { data = response.body.isNotEmpty ? jsonDecode(response.body) as Map<String, dynamic> : {}; }
+    catch (_) { throw Exception('Invalid server response (${response.statusCode})'); }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return data;
     }
 
-    throw Exception(data['message'] ?? 'Something went wrong');
+    throw Exception(data['message'] ?? (data['error'] is Map ? data['error']['message'] : null) ?? 'Request failed (${response.statusCode})');
   }
 }

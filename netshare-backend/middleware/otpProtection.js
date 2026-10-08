@@ -35,7 +35,7 @@ export const checkOtpAttempts = async (req, res, next) => {
     next();
   } catch (err) {
     logger.error({ err }, 'OTP protection middleware error');
-    next();
+    return res.status(503).json({ message: 'Verification protection temporarily unavailable' });
   }
 };
 
@@ -43,16 +43,13 @@ export const checkOtpAttempts = async (req, res, next) => {
  * Records a failed OTP attempt. Call this when OTP verification fails.
  */
 export const recordFailedOtpAttempt = async (user) => {
-  const attempts = (user.otpAttempts || 0) + 1;
-  const update = { otpAttempts: attempts };
-  
-  if (attempts >= MAX_OTP_ATTEMPTS) {
-    update.otpLockedUntil = new Date(Date.now() + LOCKOUT_DURATION_MS);
-    update.otpAttempts = 0; // Reset counter after lockout
-    logger.warn({ email: user.email, attempts }, 'OTP attempt limit reached — locking account');
-  }
-  
-  await User.findByIdAndUpdate(user._id, update);
+  await User.updateOne({ _id: user._id }, [{ $set: {
+    otpAttempts: { $add: [{ $ifNull: ['$otpAttempts', 0] }, 1] },
+    otpLockedUntil: { $cond: [
+      { $gte: [{ $add: [{ $ifNull: ['$otpAttempts', 0] }, 1] }, MAX_OTP_ATTEMPTS] },
+      new Date(Date.now() + LOCKOUT_DURATION_MS), '$otpLockedUntil',
+    ] },
+  } }]);
 };
 
 /**
@@ -94,7 +91,7 @@ export const checkResendCooldown = async (req, res, next) => {
     next();
   } catch (err) {
     logger.error({ err }, 'Resend cooldown middleware error');
-    next();
+    return res.status(503).json({ message: 'Verification protection temporarily unavailable' });
   }
 };
 

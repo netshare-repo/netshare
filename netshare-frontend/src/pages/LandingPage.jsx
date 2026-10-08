@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/authState";
 import {
   Network,
   Globe,
@@ -13,14 +13,12 @@ import {
   Menu,
   X,
   CreditCard,
-  BarChart,
   CheckCircle2,
   Layers,
   CheckSquare,
   Gift,
   ChevronDown,
   ChevronUp,
-  Users,
   Settings,
   Database
 } from "lucide-react";
@@ -145,7 +143,7 @@ function LandingPage() {
                 <Activity size={18} color="var(--primary)" />
               </div>
               
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px", background: "rgba(34, 197, 94, 0.1)", color: "var(--accent-green)", padding: "6px 12px", borderRadius: "999px", display: "inline-flex", fontSize: "0.85rem", fontWeight: "600" }}>
+              <div style={{ alignItems: "center", gap: "8px", marginBottom: "20px", background: "rgba(34, 197, 94, 0.1)", color: "var(--accent-green)", padding: "6px 12px", borderRadius: "999px", display: "inline-flex", fontSize: "0.85rem", fontWeight: "600" }}>
                 <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--accent-green)", animation: "pulseSoft 2s infinite" }}></span>
                 Status: Active
               </div>

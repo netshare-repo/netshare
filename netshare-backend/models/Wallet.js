@@ -11,12 +11,19 @@ const walletSchema = new mongoose.Schema(
 
     balance: {
       type: Number,
-      default: 500,
+      default: 0,
     },
 
     earnedCredits: {
       type: Number,
       default: 0,
+    },
+
+    // Earned node rewards available for payout; excludes top-ups/demo credits.
+    withdrawableCredits: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
 
     spentCredits: {

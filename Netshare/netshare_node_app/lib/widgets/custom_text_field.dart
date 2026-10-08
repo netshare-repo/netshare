@@ -49,7 +49,7 @@ class CustomTextField extends StatelessWidget {
             prefixIcon: Container(
               margin: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.primaryBlue.withOpacity(0.1),
+                color: AppColors.primaryBlue.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(13),
               ),
               child: Icon(

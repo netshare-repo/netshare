@@ -17,7 +17,7 @@ export const getAdminDashboard = async (req, res) => {
       status: { $in: ["pending", "assigned", "running"] },
     });
     const completedTasks = await TestingTask.countDocuments({
-      status: "completed",
+      status: { $in: ['completed', 'settled'] },
     });
 
     const creditTransactions = await CreditTransaction.find({

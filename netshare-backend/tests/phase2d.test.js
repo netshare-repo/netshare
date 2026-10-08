@@ -39,6 +39,8 @@ import {
   dispatchTaskOverDataChannel,
   settleTaskResult,
   handleTaskFailure,
+  startAndroidSecureRouting,
+  abortAndroidSecureRouting,
 } from '../services/secureTaskRoutingService.js';
 import {
   createPeer,
@@ -47,8 +49,11 @@ import {
 } from '../services/webrtcPeerService.js';
 import {
   validateNodeTarget,
+  validateNodeRedirect,
   executeSecureResidentialHttpTest,
 } from '../../netshare-agent/src/secureTaskExecutor.js';
+import taskExecutor from '../../netshare-agent/src/taskExecutor.js';
+import taskReceiver from '../../netshare-agent/src/taskReceiver.js';
 
 let testNodeUserId;
 let testClientUserId;
@@ -411,7 +416,7 @@ describe('Phase 2D: Real Controlled Task Routing', () => {
   // =========================================================================
   // T10: Real task result stored once
   // =========================================================================
-  it('T10: real task result stored exactly once with true execution metrics', async () => {
+  it('T10: task result stored exactly once with explicit offline fixture metrics', async () => {
     const task = await TestingTask.create({
       clientId: testClientUserId,
       targetUrl: 'https://example.com',
@@ -429,7 +434,7 @@ describe('Phase 2D: Real Controlled Task Routing', () => {
       nodeId: testNodeDeviceId,
     });
 
-    // Execute real residential test
+    // Explicit offline fixture: NOT real residential/Android execution.
     const execMetrics = await executeSecureResidentialHttpTest('https://example.com', {
       authorizedHost: 'example.com',
       authorizedPort: 443,
@@ -539,5 +544,161 @@ describe('Phase 2D: Real Controlled Task Routing', () => {
     expect(updatedSession.status).toBe('failed');
 
     expect(isPeerInState(session._id.toString(), 'created', 'open')).toBe(false);
+  });
+
+  it('T13: DNS failures are rejected instead of failing open', async () => {
+    const target = 'https://netshare-phase2e-does-not-exist.invalid/';
+
+    const backendCheck = await validateTarget(target);
+    expect(backendCheck.valid).toBe(false);
+    expect(backendCheck.reason).toMatch(/DNS resolution failed/i);
+
+    const nodeCheck = await validateNodeTarget(target);
+    expect(nodeCheck.valid).toBe(false);
+    expect(nodeCheck.reason).toMatch(/DNS resolution failed/i);
+  });
+
+  it('T14: redirects cannot escape the authorized public host', async () => {
+    const backendCheck = await validateRedirect(
+      'https://example.com/start',
+      'https://www.iana.org/domains/reserved',
+      { authorizedHost: 'example.com', authorizedPort: 443, authorizedMethod: 'GET' }
+    );
+    expect(backendCheck.valid).toBe(false);
+    expect(backendCheck.reason).toMatch(/authorized host/i);
+
+    const nodeCheck = await validateNodeRedirect(
+      'https://example.com/start',
+      'https://www.iana.org/domains/reserved',
+      { authorizedHost: 'example.com', authorizedPort: 443 }
+    );
+    expect(nodeCheck.valid).toBe(false);
+    expect(nodeCheck.reason).toMatch(/authorized host/i);
+  });
+
+  it('T15: settlement rejects a result bound to a different RoutingSession task', async () => {
+    const firstTask = await TestingTask.create({
+      clientId: testClientUserId,
+      targetUrl: 'https://example.com',
+      serviceType: 'performance_testing',
+      targetRegion: 'us-east',
+      executionLimit: 1,
+      estimatedCost: 10,
+      status: 'assigned',
+      assignedNodeId: testNodeDeviceId,
+    });
+    const secondTask = await TestingTask.create({
+      clientId: testClientUserId,
+      targetUrl: 'https://example.com',
+      serviceType: 'performance_testing',
+      targetRegion: 'us-east',
+      executionLimit: 1,
+      estimatedCost: 10,
+      status: 'assigned',
+      assignedNodeId: testNodeDeviceId,
+    });
+    const { session } = await prepareAuthorizedTaskSession({
+      taskId: firstTask._id,
+      clientId: testClientUserId,
+      nodeId: testNodeDeviceId,
+    });
+
+    await expect(settleTaskResult(session._id.toString(), {
+      taskId: secondTask._id.toString(),
+      success: true,
+      statusCode: 200,
+      latencyMs: 10,
+      bandwidthUsedMB: 0.05,
+    })).rejects.toMatchObject({ code: 'BINDING_MISMATCH' });
+
+    expect(await TaskResult.countDocuments({ taskId: secondTask._id })).toBe(0);
+  });
+
+  it('T16: live Node Agent rejects tasks without an authorization envelope', async () => {
+    const missingEnvelope = {
+      taskId: new mongoose.Types.ObjectId().toString(),
+      target: 'https://example.com',
+      taskType: 'performance_testing',
+      limits: { timeoutMs: 1000 },
+    };
+    expect(taskReceiver.validateTask(missingEnvelope)).toMatchObject({ valid: false });
+    await expect(taskExecutor.executeTask(missingEnvelope)).rejects.toThrow(/authorization envelope/i);
+
+    const authorized = {
+      ...missingEnvelope,
+      authorizedHost: 'example.com',
+      authorizedPort: 443,
+      authorizedMethod: 'GET',
+    };
+    expect(taskReceiver.validateTask(authorized)).toMatchObject({ valid: true });
+  });
+
+  it('T17: Android production dispatch emits signaling only and keeps task data on DataChannel', async () => {
+    const task = await TestingTask.create({
+      clientId: testClientUserId,
+      targetUrl: 'https://example.com',
+      serviceType: 'performance_testing',
+      targetRegion: 'us-east',
+      executionLimit: 1,
+      estimatedCost: 10,
+      status: 'assigned',
+      assignedNodeId: testNodeDeviceId,
+    });
+    const emitted = [];
+    const route = await startAndroidSecureRouting({
+      taskId: task._id,
+      clientId: testClientUserId,
+      nodeId: testNodeDeviceId,
+      emitToNode: (event, payload) => emitted.push({ event, payload }),
+    });
+
+    const offer = emitted.find((item) => item.event === 'secure_route:offer');
+    expect(offer).toBeDefined();
+    expect(offer.payload.routingSessionId).toBe(route.routingSessionId);
+    expect(offer.payload.authToken).toHaveLength(64);
+    expect(offer.payload.sdp).toContain('v=0');
+    expect(offer.payload.taskEnvelope).toBeUndefined();
+    expect(emitted.some((item) => item.event === 'task_assigned')).toBe(false);
+
+    const session = await RoutingSession.findById(route.routingSessionId);
+    expect(session.status).toBe('negotiating');
+    await abortAndroidSecureRouting(route.routingSessionId, 'test_cleanup');
+  });
+
+  it('T18: failed Android result is recorded once and never rewarded', async () => {
+    const task = await TestingTask.create({
+      clientId: testClientUserId,
+      targetUrl: 'https://example.com',
+      serviceType: 'performance_testing',
+      targetRegion: 'us-east',
+      executionLimit: 1,
+      estimatedCost: 10,
+      status: 'assigned',
+      assignedNodeId: testNodeDeviceId,
+    });
+    const { session } = await prepareAuthorizedTaskSession({
+      taskId: task._id,
+      clientId: testClientUserId,
+      nodeId: testNodeDeviceId,
+    });
+    const walletBefore = await Wallet.findOne({ userId: testNodeUserId });
+
+    const outcome = await settleTaskResult(session._id.toString(), {
+      taskId: task._id.toString(),
+      success: false,
+      statusCode: 503,
+      latencyMs: 0,
+      bandwidthUsedMB: 0,
+      successRate: 0,
+      resultData: { error: 'VPN revoked' },
+    });
+
+    const walletAfter = await Wallet.findOne({ userId: testNodeUserId });
+    const failedTask = await TestingTask.findById(task._id);
+    expect(outcome.settled).toBe(false);
+    expect(outcome.taskResult.success).toBe(false);
+    expect(failedTask.status).toBe('failed');
+    expect(walletAfter.balance).toBe(walletBefore.balance);
+    expect(await TaskResult.countDocuments({ taskId: task._id })).toBe(1);
   });
 });

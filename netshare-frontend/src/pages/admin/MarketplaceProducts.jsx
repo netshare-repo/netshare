@@ -95,7 +95,7 @@ function MarketplaceProducts() {
   };
 
   useEffect(() => {
-    loadProducts();
+    void Promise.resolve().then(loadProducts);
   }, []);
 
   return (

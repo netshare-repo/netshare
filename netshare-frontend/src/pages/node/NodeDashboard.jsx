@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   Activity,
@@ -34,11 +34,11 @@ import {
   regenerateNodeApiKey,
   getNodeTelemetry,
 } from "../../api/nodeApi";
-import { useSocket } from "../../context/SocketContext";
+import { useSocket } from "../../context/socketState";
 import "./NodeDashboard.css";
 
 function NodeDashboard() {
-  const { isConnected: isSocketConnected, liveTelemetry, systemEvents } = useSocket();
+  const { isConnected: isSocketConnected, liveTelemetry } = useSocket();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -51,7 +51,7 @@ function NodeDashboard() {
   const [keyLoading, setKeyLoading] = useState(false);
 
   // Live Telemetry history for sparklines
-  const [telemetryHistory, setTelemetryHistory] = useState([]);
+  const [, setTelemetryHistory] = useState([]);
 
   const [registerForm, setRegisterForm] = useState({
     deviceName: "Primary Desktop Node",
@@ -83,7 +83,7 @@ function NodeDashboard() {
       setKeyLoading(true);
       const res = await getNodeApiKey();
       setApiKey(res.apiKey || "");
-    } catch (_) {
+    } catch {
       // Non-blocking
     } finally {
       setKeyLoading(false);
@@ -96,13 +96,11 @@ function NodeDashboard() {
       if (res.telemetry) {
         setTelemetryHistory(res.telemetry);
       }
-    } catch (_) {}
+    } catch { /* Historical telemetry is optional. */ }
   };
 
   useEffect(() => {
-    fetchData();
-    fetchApiKey();
-    fetchTelemetryHistory();
+    void Promise.resolve().then(() => { fetchData(); fetchApiKey(); fetchTelemetryHistory(); });
     const interval = setInterval(() => {
       fetchData();
       fetchTelemetryHistory();
@@ -156,7 +154,7 @@ function NodeDashboard() {
       setKeyLoading(true);
       const res = await regenerateNodeApiKey();
       setApiKey(res.apiKey);
-    } catch (err) {
+    } catch {
       setError("Failed to regenerate API Key");
     } finally {
       setKeyLoading(false);

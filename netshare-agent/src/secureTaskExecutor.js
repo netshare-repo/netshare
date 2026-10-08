@@ -136,34 +136,35 @@ export const validateNodeTarget = async (targetUrl, authorization = {}) => {
 
   // 6. DNS resolution verification
   try {
-    const addresses = await dns.resolve4(hostname);
-    if (addresses && addresses.length > 0) {
-      for (const ip of addresses) {
-        if (isPrivateIPv4(ip)) {
-          return { valid: false, reason: `DNS resolved to private IP '${ip}'. Anti-SSRF guard blocked request.` };
-        }
-        if (BLOCKED_EXACT_IPS.includes(ip)) {
-          return { valid: false, reason: `DNS resolved to blocked IP '${ip}'.` };
-        }
-      }
-      return { valid: true, resolvedIp: addresses[0] };
+    const lookups = await dns.lookup(hostname, { all: true, verbatim: true });
+    if (!lookups || lookups.length === 0) {
+      return { valid: false, reason: 'DNS resolution returned no addresses' };
     }
-  } catch (err) {
-    try {
-      const lookup = await dns.lookup(hostname);
-      if (lookup && lookup.address) {
-        if (isPrivateIPv4(lookup.address) || BLOCKED_EXACT_IPS.includes(lookup.address)) {
-          return { valid: false, reason: `DNS resolved to blocked IP '${lookup.address}'. Anti-SSRF guard blocked request.` };
-        }
-        return { valid: true, resolvedIp: lookup.address };
+    for (const lookup of lookups) {
+      if (isPrivateIPv4(lookup.address) || isBlockedIPv6(lookup.address) || BLOCKED_EXACT_IPS.includes(lookup.address)) {
+        return { valid: false, reason: `DNS resolved to blocked IP '${lookup.address}'. Anti-SSRF guard blocked request.` };
       }
-    } catch (_) {
-      // In offline / test sandbox environments without external DNS servers, proceed with caution
-      return { valid: true, resolvedIp: 'unresolved' };
     }
+    return { valid: true, resolvedIp: lookups[0].address };
+  } catch (lookupErr) {
+    return { valid: false, reason: `DNS resolution failed: ${lookupErr.code || lookupErr.message}` };
+  }
+};
+
+/** Resolve and validate a redirect without allowing it to escape the task's
+ * authorized host/port boundary. */
+export const validateNodeRedirect = async (originalUrl, location, authorization = {}) => {
+  let resolvedUrl;
+  try {
+    resolvedUrl = new URL(location, originalUrl).toString();
+  } catch {
+    return { valid: false, reason: 'Invalid redirect URL format' };
   }
 
-  return { valid: true, resolvedIp: 'unresolved' };
+  const validation = await validateNodeTarget(resolvedUrl, authorization);
+  return validation.valid
+    ? { ...validation, valid: true, resolvedUrl }
+    : { ...validation, valid: false, resolvedUrl, reason: `Unsafe redirect blocked: ${validation.reason}` };
 };
 
 /**
@@ -186,8 +187,8 @@ export const executeSecureResidentialHttpTest = async (targetUrl, options = {}) 
   while (redirectsCount <= maxRedirects) {
     // 1. Validate destination
     const validation = await validateNodeTarget(currentUrl, {
-      authorizedHost: redirectsCount === 0 ? authorizedHost : null,
-      authorizedPort: redirectsCount === 0 ? authorizedPort : null,
+      authorizedHost,
+      authorizedPort,
     });
 
     if (!validation.valid) {
@@ -197,10 +198,10 @@ export const executeSecureResidentialHttpTest = async (targetUrl, options = {}) 
         latencyMs: 0,
         totalDurationMs: 0,
         downloadSizeBytes: 0,
-        bandwidthUsedMB: 0.01,
-        downloadBandwidthMB: 0.01,
-        uploadBandwidthMB: 0.01,
-        packetLoss: 100,
+        bandwidthUsedMB: 0,
+        downloadBandwidthMB: 0,
+        uploadBandwidthMB: 0,
+        packetLoss: null,
         successRate: 0,
         resultData: { error: `Security check rejected target: ${validation.reason}` },
       };
@@ -208,9 +209,10 @@ export const executeSecureResidentialHttpTest = async (targetUrl, options = {}) 
 
     // 2. Perform HTTP request or mock response for offline testing
     if (mockResponse) {
+      if (process.env.NODE_ENV === 'production') throw new Error('Mock execution is disabled in production');
       const downloadSize = mockResponse.downloadSizeBytes || (mockResponse.body ? Buffer.byteLength(mockResponse.body) : 4096);
-      const sizeMB = parseFloat((downloadSize / (1024 * 1024)).toFixed(4));
-      const billedMB = Math.max(0.05, sizeMB);
+      const sizeMB = downloadSize / (1024 * 1024);
+      const billedMB = sizeMB;
       const isSuccess = (mockResponse.statusCode || 200) >= 200 && (mockResponse.statusCode || 200) < 400;
 
       return {
@@ -224,9 +226,9 @@ export const executeSecureResidentialHttpTest = async (targetUrl, options = {}) 
         downloadSizeBytes: downloadSize,
         downloadBandwidthMB: billedMB,
         bandwidthUsedMB: billedMB,
-        uploadBandwidthMB: 0.01,
-        packetLoss: 0,
-        successRate: isSuccess ? 100 : 50,
+        uploadBandwidthMB: 0,
+        packetLoss: null,
+        successRate: isSuccess ? 100 : 0,
         resultData: {
           statusCode: mockResponse.statusCode || 200,
           contentType: mockResponse.contentType || 'text/html',
@@ -251,6 +253,7 @@ export const executeSecureResidentialHttpTest = async (targetUrl, options = {}) 
       let downloadSize = 0;
       let statusCode = 0;
       let headers = {};
+      let requestSocket, initialWritten = 0;
 
       const req = client.request(
         currentUrl,
@@ -286,8 +289,8 @@ export const executeSecureResidentialHttpTest = async (targetUrl, options = {}) 
 
           res.on('end', () => {
             const totalDuration = performance.now() - startTime;
-            const sizeMB = parseFloat((downloadSize / (1024 * 1024)).toFixed(4));
-            const billedMB = Math.max(0.05, sizeMB);
+            const sizeMB = downloadSize / (1024 * 1024);
+            const billedMB = sizeMB;
 
             resolve({
               isRedirect: false,
@@ -295,19 +298,20 @@ export const executeSecureResidentialHttpTest = async (targetUrl, options = {}) 
               statusCode,
               latencyMs: Math.round(firstByteTime),
               totalDurationMs: Math.round(totalDuration),
-              connectionTimeMs: Math.round(tcpTime || firstByteTime * 0.4),
+              connectionTimeMs: tcpTime ? Math.round(tcpTime) : null,
               dnsTimeMs: Math.round(dnsTime),
               downloadSizeBytes: downloadSize,
               downloadBandwidthMB: billedMB,
               bandwidthUsedMB: billedMB,
-              uploadBandwidthMB: 0.01,
-              packetLoss: 0,
-              successRate: statusCode >= 200 && statusCode < 400 ? 100 : 50,
+              uploadBandwidthMB: requestSocket ? Math.max(0, requestSocket.bytesWritten - initialWritten) / (1024 * 1024) : 0,
+              packetLoss: null,
+              successRate: statusCode >= 200 && statusCode < 400 ? 100 : 0,
               resultData: {
                 statusCode,
                 contentType: headers['content-type'] || 'unknown',
                 server: headers['server'] || 'unknown',
                 responseSizeBytes: downloadSize,
+                packetLossMeasured: false,
                 ttfbMs: Math.round(firstByteTime),
                 totalTimeMs: Math.round(totalDuration),
               },
@@ -317,6 +321,7 @@ export const executeSecureResidentialHttpTest = async (targetUrl, options = {}) 
       );
 
       req.on('socket', (socket) => {
+        requestSocket = socket; initialWritten = socket.bytesWritten;
         socket.on('lookup', () => {
           dnsTime = performance.now() - startTime;
         });
@@ -334,10 +339,10 @@ export const executeSecureResidentialHttpTest = async (targetUrl, options = {}) 
           latencyMs: timeoutMs,
           totalDurationMs: timeoutMs,
           downloadSizeBytes: 0,
-          downloadBandwidthMB: 0.01,
-          bandwidthUsedMB: 0.01,
-          uploadBandwidthMB: 0.01,
-          packetLoss: 100,
+          downloadBandwidthMB: 0,
+          bandwidthUsedMB: 0,
+          uploadBandwidthMB: 0,
+          packetLoss: null,
           successRate: 0,
           resultData: { error: 'Residential request timed out' },
         });
@@ -352,10 +357,10 @@ export const executeSecureResidentialHttpTest = async (targetUrl, options = {}) 
           latencyMs: Math.round(totalDuration),
           totalDurationMs: Math.round(totalDuration),
           downloadSizeBytes: 0,
-          downloadBandwidthMB: 0.01,
-          bandwidthUsedMB: 0.01,
-          uploadBandwidthMB: 0.01,
-          packetLoss: 100,
+          downloadBandwidthMB: 0,
+          bandwidthUsedMB: 0,
+          uploadBandwidthMB: 0,
+          packetLoss: null,
           successRate: 0,
           resultData: { error: err.message },
         });
@@ -370,23 +375,26 @@ export const executeSecureResidentialHttpTest = async (targetUrl, options = {}) 
 
     // Handle redirect: resolve new location relative to currentUrl
     redirectsCount++;
-    try {
-      currentUrl = new URL(stepResult.location, currentUrl).toString();
-    } catch {
+    const redirectValidation = await validateNodeRedirect(currentUrl, stepResult.location, {
+      authorizedHost,
+      authorizedPort,
+    });
+    if (!redirectValidation.valid) {
       return {
         success: false,
-        statusCode: 400,
+        statusCode: 403,
         latencyMs: 0,
         totalDurationMs: Math.round(stepResult.duration),
         downloadSizeBytes: 0,
-        bandwidthUsedMB: 0.01,
-        downloadBandwidthMB: 0.01,
-        uploadBandwidthMB: 0.01,
-        packetLoss: 100,
+        bandwidthUsedMB: 0,
+        downloadBandwidthMB: 0,
+        uploadBandwidthMB: 0,
+        packetLoss: null,
         successRate: 0,
-        resultData: { error: `Invalid redirect location header: ${stepResult.location}` },
+        resultData: { error: redirectValidation.reason },
       };
     }
+    currentUrl = redirectValidation.resolvedUrl;
   }
 
   return {
@@ -395,10 +403,10 @@ export const executeSecureResidentialHttpTest = async (targetUrl, options = {}) 
     latencyMs: 0,
     totalDurationMs: 0,
     downloadSizeBytes: 0,
-    bandwidthUsedMB: 0.01,
-    downloadBandwidthMB: 0.01,
-    uploadBandwidthMB: 0.01,
-    packetLoss: 100,
+    bandwidthUsedMB: 0,
+    downloadBandwidthMB: 0,
+    uploadBandwidthMB: 0,
+    packetLoss: null,
     successRate: 0,
     resultData: { error: 'Exceeded maximum redirect limit' },
   };
@@ -406,5 +414,6 @@ export const executeSecureResidentialHttpTest = async (targetUrl, options = {}) 
 
 export default {
   validateNodeTarget,
+  validateNodeRedirect,
   executeSecureResidentialHttpTest,
 };

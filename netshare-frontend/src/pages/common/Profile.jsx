@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { getProfile, updateProfile, changePassword } from "../../api/userApi";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/authState";
 import "./Profile.css"; // We'll create a basic CSS
 
 function Profile() {
@@ -14,11 +14,7 @@ function Profile() {
   const [passMessage, setPassMessage] = useState("");
   const [passError, setPassError] = useState("");
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
-
-  const fetchProfile = async () => {
+  async function fetchProfile() {
     try {
       const res = await getProfile();
       setProfileData({
@@ -29,7 +25,11 @@ function Profile() {
     } catch (err) {
       console.error(err);
     }
-  };
+  }
+
+  useEffect(() => {
+    void Promise.resolve().then(fetchProfile);
+  }, []);
 
   const handleProfileUpdate = async (e) => {
     e.preventDefault();

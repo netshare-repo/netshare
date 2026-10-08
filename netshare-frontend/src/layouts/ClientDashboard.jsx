@@ -41,7 +41,7 @@ function ClientDashboard() {
   };
 
   useEffect(() => {
-    fetchDashboardData();
+    void Promise.resolve().then(fetchDashboardData);
   }, []);
 
   const stats = [

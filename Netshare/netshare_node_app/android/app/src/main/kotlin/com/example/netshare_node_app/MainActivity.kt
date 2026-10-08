@@ -5,6 +5,8 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.util.Log
+import android.util.Base64
+import java.io.ByteArrayOutputStream
 import androidx.annotation.NonNull
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -32,13 +34,42 @@ class MainActivity : FlutterActivity(), NetShareVpnService.VpnStateListener {
         private const val VPN_METHOD_CHANNEL = "io.netshare.node/vpn"
         private const val VPN_EVENT_CHANNEL = "io.netshare.node/vpn_events"
         private const val VPN_REQUEST_CODE = 0x2026
+        private const val PROOF_REQUEST_CODE = 0x2027
+        private const val CSV_REQUEST_CODE = 0x2028
     }
 
     private var pendingPermissionResult: MethodChannel.Result? = null
     private var eventSink: EventChannel.EventSink? = null
+    private var pendingDocumentResult: MethodChannel.Result? = null
+    private var pendingCsv: String? = null
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "io.netshare.app/documents").setMethodCallHandler { call, result ->
+            if (pendingDocumentResult != null) {
+                result.error("DOCUMENT_BUSY", "A document operation is already in progress", null)
+            } else if (call.method == "pickProof" || call.method == "saveCsv") {
+                val saving = call.method == "saveCsv"
+                val content = call.argument<String>("content")
+                if (saving && (content == null || content.toByteArray(Charsets.UTF_8).size > 2 * 1024 * 1024)) {
+                    result.error("INVALID_REPORT", "Report is missing or exceeds 2 MB", null)
+                } else {
+                    pendingDocumentResult = result
+                    pendingCsv = if (saving) content else null
+                    val intent = Intent(if (saving) Intent.ACTION_CREATE_DOCUMENT else Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = if (saving) "text/csv" else "*/*"
+                        if (saving) putExtra(Intent.EXTRA_TITLE, call.argument<String>("filename") ?: "netshare-report.csv")
+                        else putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/png", "image/jpeg", "application/pdf"))
+                    }
+                    try { startActivityForResult(intent, if (saving) CSV_REQUEST_CODE else PROOF_REQUEST_CODE) }
+                    catch (error: Exception) {
+                        pendingDocumentResult = null; pendingCsv = null
+                        result.error("PICKER_UNAVAILABLE", "Could not open the document picker", null)
+                    }
+                }
+            } else result.notImplemented()
+        }
 
         // 1. MethodChannel for control actions
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, VPN_METHOD_CHANNEL).setMethodCallHandler { call, result ->
@@ -70,6 +101,9 @@ class MainActivity : FlutterActivity(), NetShareVpnService.VpnStateListener {
 
     override fun onDestroy() {
         NetShareVpnService.removeListener(this)
+        pendingDocumentResult?.error("ACTIVITY_CLOSED", "Document activity closed; retry the operation", null)
+        pendingDocumentResult = null
+        pendingCsv = null
         super.onDestroy()
     }
 
@@ -112,6 +146,21 @@ class MainActivity : FlutterActivity(), NetShareVpnService.VpnStateListener {
                 val virtualIp = call.argument<String>("virtualIp") ?: NetShareVpnService.DEFAULT_VIRTUAL_IP
                 val subnetRoute = call.argument<String>("subnetRoute") ?: NetShareVpnService.DEFAULT_SUBNET_ROUTE
                 val prefixLength = call.argument<Int>("prefixLength") ?: NetShareVpnService.DEFAULT_PREFIX_LENGTH
+                val routingSessionId = call.argument<String>("routingSessionId")
+                val authorizedHost = call.argument<String>("authorizedHost")
+                val authorizedPort = call.argument<Int>("authorizedPort")
+                val authorizedMethod = call.argument<String>("authorizedMethod") ?: "GET"
+                val authorizedIps = call.argument<List<String>>("authorizedIps") ?: emptyList()
+
+                if (routingSessionId.isNullOrBlank() ||
+                    authorizedHost.isNullOrBlank() ||
+                    authorizedPort == null ||
+                    authorizedMethod !in setOf("GET", "HEAD") ||
+                    authorizedIps.isEmpty()
+                ) {
+                    result.error("INVALID_AUTHORIZATION", "Task-specific routing authorization is required", null)
+                    return
+                }
 
                 val intent = Intent(this, NetShareVpnService::class.java).apply {
                     action = NetShareVpnService.ACTION_START
@@ -119,6 +168,11 @@ class MainActivity : FlutterActivity(), NetShareVpnService.VpnStateListener {
                     putExtra(NetShareVpnService.EXTRA_VIRTUAL_IP, virtualIp)
                     putExtra(NetShareVpnService.EXTRA_SUBNET_ROUTE, subnetRoute)
                     putExtra(NetShareVpnService.EXTRA_PREFIX_LENGTH, prefixLength)
+                    putExtra(NetShareVpnService.EXTRA_ROUTING_SESSION_ID, routingSessionId)
+                    putExtra(NetShareVpnService.EXTRA_AUTHORIZED_HOST, authorizedHost)
+                    putExtra(NetShareVpnService.EXTRA_AUTHORIZED_PORT, authorizedPort)
+                    putExtra(NetShareVpnService.EXTRA_AUTHORIZED_METHOD, authorizedMethod)
+                    putStringArrayListExtra(NetShareVpnService.EXTRA_AUTHORIZED_IPS, ArrayList(authorizedIps))
                 }
 
                 try {
@@ -180,6 +234,47 @@ class MainActivity : FlutterActivity(), NetShareVpnService.VpnStateListener {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == PROOF_REQUEST_CODE || requestCode == CSV_REQUEST_CODE) {
+            val result = pendingDocumentResult ?: return
+            val uri = data?.data
+            val csv = pendingCsv
+            if (resultCode != Activity.RESULT_OK || uri == null) {
+                pendingDocumentResult = null; pendingCsv = null
+                result.success(if (requestCode == CSV_REQUEST_CODE) false else null)
+                return
+            }
+            Thread {
+                try {
+                    val payload: Any = if (requestCode == CSV_REQUEST_CODE) {
+                        contentResolver.openOutputStream(uri, "wt")?.use { it.write((csv ?: "").toByteArray(Charsets.UTF_8)) }
+                            ?: throw IllegalStateException("Cannot write selected document")
+                        true
+                    } else {
+                        val mime = contentResolver.getType(uri) ?: ""
+                        require(mime in setOf("image/png", "image/jpeg", "application/pdf")) { "Proof must be PNG, JPEG or PDF" }
+                        val bytes = contentResolver.openInputStream(uri)?.use { stream ->
+                            val output = ByteArrayOutputStream()
+                            val buffer = ByteArray(8192)
+                            var size = 0
+                            while (true) {
+                                val count = stream.read(buffer)
+                                if (count < 0) break
+                                size += count
+                                require(size <= 2 * 1024 * 1024) { "Proof exceeds 2 MB" }
+                                output.write(buffer, 0, count)
+                            }
+                            require(size > 0) { "Proof is empty" }
+                            output.toByteArray()
+                        } ?: throw IllegalStateException("Cannot read selected document")
+                        mapOf("mime" to mime, "base64" to Base64.encodeToString(bytes, Base64.NO_WRAP), "size" to bytes.size)
+                    }
+                    runOnUiThread { if (pendingDocumentResult === result) { pendingDocumentResult = null; pendingCsv = null; result.success(payload) } }
+                } catch (error: Exception) {
+                    runOnUiThread { if (pendingDocumentResult === result) { pendingDocumentResult = null; pendingCsv = null; result.error("DOCUMENT_FAILED", error.message, null) } }
+                }
+            }.start()
+            return
+        }
 
         if (requestCode == VPN_REQUEST_CODE) {
             val granted = resultCode == Activity.RESULT_OK

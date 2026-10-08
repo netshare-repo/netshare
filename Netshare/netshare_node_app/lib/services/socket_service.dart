@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as socket_io;
 import 'api_service.dart';
-import 'task_executor_service.dart';
+import 'android_webrtc_service.dart';
 
 class NodeSocketService {
   static socket_io.Socket? _socket;
@@ -55,17 +55,34 @@ class NodeSocketService {
       onLog?.call("Handshake confirmed by server: ${_currentNodeId ?? ''}");
     });
 
-    socket.on('task_assigned', (data) async {
-      if (data is Map) {
-        onLog?.call("Received task: ${data['taskId']} (${data['taskType']})");
-        await _handleTaskExecution(Map<String, dynamic>.from(data));
+    AndroidWebRtcService.onLog = onLog;
+    socket.on('secure_route:offer', (data) async {
+      if (data is! Map) return;
+      try {
+        final offer = Map<String, dynamic>.from(data);
+        onLog?.call('Received authenticated Android WebRTC offer');
+        await AndroidWebRtcService.acceptOffer(offer, _emitSignaling);
+      } catch (error) {
+        onLog?.call('WebRTC offer rejected: $error');
       }
     });
-
-    socket.on('task_completed_ack', (data) {
+    socket.on('secure_route:ice_candidate', (data) async {
       if (data is Map) {
-        onLog?.call("Reward settled: +${data['rewardEarned']} credits");
+        await AndroidWebRtcService.acceptIceCandidate(
+          Map<String, dynamic>.from(data),
+        );
       }
+    });
+    socket.on('secure_route:settled', (data) async {
+      if (data is! Map) return;
+      final sessionId = data['routingSessionId']?.toString();
+      if (sessionId != null) {
+        onLog?.call('Secure Android task settled exactly once');
+        await AndroidWebRtcService.closeSession(sessionId);
+      }
+    });
+    socket.on('secure_route:error', (data) {
+      onLog?.call('Secure route error: $data');
     });
 
     socket.onDisconnect((reason) {
@@ -117,34 +134,18 @@ class NodeSocketService {
     _socket!.emit('heartbeat', payload);
   }
 
-  /// Handle incoming task execution on mobile edge
-  static Future<void> _handleTaskExecution(Map<String, dynamic> task) async {
-    final taskId = task['taskId']?.toString() ?? '';
-    final target = task['target']?.toString() ?? '';
-    final taskType = task['taskType']?.toString() ?? 'performance_testing';
-
-    if (taskId.isEmpty || target.isEmpty) return;
-
-    // 1. Notify server task started
-    _socket?.emit('task_started', {'taskId': taskId});
-
-    // 2. Execute task using edge executor
-    TaskExecutionResult result;
-    if (taskType.toLowerCase().contains('ping')) {
-      result = await TaskExecutorService.executePingTest(target);
-    } else {
-      result = await TaskExecutorService.executeHttpPerformanceTest(target);
+  static void _emitSignaling(String event, Map<String, dynamic> payload) {
+    final socket = _socket;
+    if (socket == null || !socket.connected) {
+      throw StateError('Socket signaling channel is unavailable');
     }
-
-    onLog?.call("Task completed: ${result.statusCode}, Latency: ${result.latencyMs}ms, Size: ${result.bandwidthUsedMB}MB");
-
-    // 3. Send results back to control plane
-    _socket?.emit('task_completed', result.toMap(taskId));
+    socket.emit(event, payload);
   }
 
   /// Disconnect socket cleanly
-  static void disconnect() {
+  static Future<void> disconnect() async {
     _stopHeartbeat();
+    await AndroidWebRtcService.closeAll();
     _socket?.disconnect();
     _socket?.dispose();
     _socket = null;

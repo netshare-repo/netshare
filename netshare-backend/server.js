@@ -22,9 +22,22 @@ import sessionRoutes from './routes/sessionRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
+import { adminOperationsRoutes, disputeRoutes, notificationRoutes } from './routes/operationsRoutes.js';
+import { startMonitoring } from './services/monitoringService.js';
+import AnomalyAlert from './models/AnomalyAlert.js';
+import Notification from './models/Notification.js';
+import Dispute from './models/Dispute.js';
+import TaskResult from './models/TaskResult.js';
+import CreditTransaction from './models/CreditTransaction.js';
+import TopUpRequest from './models/TopUpRequest.js';
+import WithdrawalRequest from './models/WithdrawalRequest.js';
+import { startTaskRecovery } from './services/taskRecoveryService.js';
 
 // Connect to MongoDB
 await connectDB();
+// Do not serve writes before the deduplication/ownership indexes are ready.
+await Promise.all([AnomalyAlert.init(), Notification.init(), Dispute.init(), TaskResult.init(),
+  CreditTransaction.init(), TopUpRequest.init(), WithdrawalRequest.init()]);
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -116,6 +129,9 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/admin', adminOperationsRoutes);
+app.use('/api/disputes', disputeRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // ─── Error Handling ────────────────────────────────────────────────────────────
 
@@ -131,6 +147,7 @@ const io = await initSocketServer(httpServer);
 (async () => {
   await initTaskQueue();
   startTaskWorker();
+  if (config.nodeEnv !== 'test') startTaskRecovery();
 })();
 
 // ─── Start Server ──────────────────────────────────────────────────────────────
@@ -146,5 +163,6 @@ httpServer.listen(config.port, () => {
 // ─── Graceful Shutdown ─────────────────────────────────────────────────────────
 
 registerShutdownHandlers(httpServer, io);
+if (config.nodeEnv !== 'test') startMonitoring();
 
 export { app, httpServer, io };

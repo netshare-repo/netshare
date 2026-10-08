@@ -1,7 +1,7 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { AuthContext } from './authState';
 import axiosInstance from "../api/axiosInstance";
 
-const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -9,7 +9,7 @@ export const AuthProvider = ({ children }) => {
 
   const token = localStorage.getItem("netshare_token");
 
-  const fetchMe = async () => {
+  const fetchMe = useCallback(async () => {
     try {
       if (!token) {
         setAuthLoading(false);
@@ -18,18 +18,18 @@ export const AuthProvider = ({ children }) => {
 
       const res = await axiosInstance.get("/auth/me");
       setUser(res.data.user);
-    } catch (error) {
+    } catch {
       localStorage.removeItem("netshare_token");
       localStorage.removeItem("netshare_user");
       setUser(null);
     } finally {
       setAuthLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
-    fetchMe();
-  }, []);
+    void Promise.resolve().then(fetchMe);
+  }, [fetchMe]);
 
   const login = (token, user) => {
     localStorage.setItem("netshare_token", token);
@@ -50,5 +50,3 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
-
-export const useAuth = () => useContext(AuthContext);

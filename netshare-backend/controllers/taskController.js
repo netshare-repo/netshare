@@ -12,6 +12,9 @@ import { deductCredits, addCredits } from "../services/walletService.js";
 import { enqueueTask } from "../services/taskQueueService.js";
 import { calculateReward } from "../services/rewardService.js";
 import BandwidthUsage from "../models/BandwidthUsage.js";
+import { estimateTaskPrice } from "../services/pricingService.js";
+import { runTransaction } from '../lib/mongoTransaction.js';
+import { validateTarget } from '../services/targetValidationService.js';
 
 const isValidUrl = (url) => {
   try {
@@ -63,8 +66,14 @@ export const createTask = async (req, res) => {
     if (!isValidUrl(targetUrl)) {
       return res.status(400).json({ message: "Invalid target URL" });
     }
+    const targetCheck = await validateTarget(targetUrl);
+    if (!targetCheck.valid) return res.status(400).json({ message: `Target rejected: ${targetCheck.reason}` });
 
-    const estimatedCost = Number(executionLimit) * 10;
+    const pricing = await estimateTaskPrice({
+      targetRegion,
+      executionLimit: Number(executionLimit),
+    });
+    const estimatedCost = pricing.quote.totalCredits;
 
     const wallet = await Wallet.findOne({ userId: req.user._id });
 
@@ -74,25 +83,32 @@ export const createTask = async (req, res) => {
       });
     }
 
-    const task = await TestingTask.create({
+    const task = await runTransaction(async session => {
+    const [task] = await TestingTask.create([{
       clientId: req.user._id,
       targetUrl,
       serviceType,
       targetRegion,
       executionLimit,
       estimatedCost,
+      pricingSnapshot: pricing.quote,
       status: "pending",
-    });
-
+    }], { session });
     await deductCredits({
       userId: req.user._id,
       taskId: task._id,
       amount: estimatedCost,
       description: `Task submission cost deducted for ${serviceType}`,
+      idempotencyKey: `task-submission:${task._id}`,
+      session,
+    });
+    return task;
     });
 
     // Enqueue task into Redis/in-memory Task Queue for real-time allocation
-    const queueResult = await enqueueTask(task);
+    let queueResult;
+    try { queueResult = await enqueueTask(task); }
+    catch { queueResult = { queueType: 'persistent-pending', jobId: null }; }
 
     // Log audit record
     try {
@@ -110,6 +126,7 @@ export const createTask = async (req, res) => {
       message: "Task submitted and queued for real-time edge node execution",
       task,
       queue: queueResult,
+      pricing,
     });
   } catch (error) {
     return res.status(500).json({
@@ -119,10 +136,39 @@ export const createTask = async (req, res) => {
   }
 };
 
+export const estimateTaskCost = async (req, res) => {
+  try {
+    const { targetRegion, executionLimit } = req.body;
+    const limit = Number(executionLimit);
+
+    if (typeof targetRegion !== "string" || !targetRegion.trim() || targetRegion.length > 80) {
+      return res.status(400).json({
+        message: "Target region must be between 1 and 80 characters",
+      });
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      return res.status(400).json({
+        message: "Execution limit must be an integer between 1 and 100",
+      });
+    }
+
+    const pricing = await estimateTaskPrice({
+      targetRegion: targetRegion.trim(),
+      executionLimit: limit,
+    });
+    return res.json(pricing);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to estimate task cost",
+      error: error.message,
+    });
+  }
+};
+
 export const getMyTasks = async (req, res) => {
   try {
     const tasks = await TestingTask.find({ clientId: req.user._id })
-      .populate("assignedNodeId")
+      .populate("assignedNodeId", "userId deviceName region status ratingAverage ratingCount")
       .sort({ createdAt: -1 });
 
     return res.json({ tasks });
@@ -138,7 +184,7 @@ export const getTaskById = async (req, res) => {
   try {
     const task = await TestingTask.findById(req.params.id)
       .populate("clientId", "name email")
-      .populate("assignedNodeId");
+      .populate("assignedNodeId", "userId deviceName region status ratingAverage ratingCount");
 
     if (!task) {
       return res.status(404).json({ message: "Task not found" });
@@ -161,6 +207,216 @@ export const getTaskById = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: "Failed to fetch task",
+      error: error.message,
+    });
+  }
+};
+
+const csvCell = (value) => {
+  let text = value === null || value === undefined ? "" : String(value);
+  if (/^[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+};
+
+export const downloadTaskReport = async (req, res) => {
+  try {
+    const task = await TestingTask.findById(req.params.id)
+      .populate("clientId", "name email")
+      .populate("assignedNodeId", "deviceName region ratingAverage ratingCount");
+
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const clientId = task.clientId?._id || task.clientId;
+    const isOwner = clientId.toString() === req.user._id.toString();
+    if (!isOwner && req.user.role !== "admin") {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    if (!["completed", "settled"].includes(task.status)) {
+      return res.status(409).json({
+        message: "Report is available only after task completion",
+      });
+    }
+
+    const result = await TaskResult.findOne({ taskId: task._id });
+    if (!result) {
+      return res.status(409).json({ message: "Task result is not report-ready" });
+    }
+
+    const headers = [
+      "taskId",
+      "serviceType",
+      "targetUrl",
+      "targetRegion",
+      "status",
+      "executionLimit",
+      "creditsConsumed",
+      "pricingVersion",
+      "nodeId",
+      "nodeName",
+      "success",
+      "successRate",
+      "latencyMs",
+      "packetLoss",
+      "bandwidthUsedMB",
+      "statusCode",
+      "completedAt",
+      "clientRating",
+      "ratingComment",
+    ];
+    const row = [
+      task._id,
+      task.serviceType,
+      task.targetUrl,
+      task.targetRegion,
+      task.status,
+      task.executionLimit,
+      task.estimatedCost,
+      task.pricingSnapshot?.version || "legacy",
+      task.assignedNodeId?._id || "",
+      task.assignedNodeId?.deviceName || "",
+      result.success,
+      result.successRate,
+      result.latencyMs,
+      result.packetLoss,
+      result.bandwidthUsedMB,
+      result.statusCode,
+      result.completedAt?.toISOString?.() || result.completedAt,
+      task.clientRating?.rating || "",
+      task.clientRating?.comment || "",
+    ];
+    const csv = `${headers.map(csvCell).join(",")}\r\n${row
+      .map(csvCell)
+      .join(",")}\r\n`;
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="netshare-task-${task._id}.csv"`
+    );
+    return res.status(200).send(`\uFEFF${csv}`);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to generate task report",
+      error: error.message,
+    });
+  }
+};
+
+export const rateTaskNode = async (req, res) => {
+  const rating = Number(req.body.rating);
+  const comment = typeof req.body.comment === "string" ? req.body.comment.trim() : "";
+
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ message: "Rating must be an integer from 1 to 5" });
+  }
+  if (comment.length > 500) {
+    return res.status(400).json({ message: "Rating comment cannot exceed 500 characters" });
+  }
+
+  let ratedTask = null;
+  try {
+    ratedTask = await TestingTask.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        clientId: req.user._id,
+        assignedNodeId: { $ne: null },
+        status: { $in: ["completed", "settled"] },
+        "clientRating.rating": { $exists: false },
+      },
+      {
+        $set: {
+          clientRating: { rating, comment, ratedAt: new Date() },
+        },
+      },
+      { new: true }
+    );
+
+    if (!ratedTask) {
+      const task = await TestingTask.findById(req.params.id);
+      if (!task) return res.status(404).json({ message: "Task not found" });
+      if (task.clientId.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ message: "Only the owning client can rate this task" });
+      }
+      if (!["completed", "settled"].includes(task.status)) {
+        return res.status(409).json({ message: "Only completed tasks can be rated" });
+      }
+      if (task.clientRating?.rating) {
+        return res.status(409).json({ message: "This task has already been rated" });
+      }
+      return res.status(409).json({ message: "Task cannot be rated" });
+    }
+
+    const node = await NodeDevice.findOneAndUpdate(
+      { _id: ratedTask.assignedNodeId },
+      [
+        {
+          $set: {
+            ratingTotal: { $add: [{ $ifNull: ["$ratingTotal", 0] }, rating] },
+            ratingCount: { $add: [{ $ifNull: ["$ratingCount", 0] }, 1] },
+            ratingAverage: {
+              $round: [
+                {
+                  $divide: [
+                    { $add: [{ $ifNull: ["$ratingTotal", 0] }, rating] },
+                    { $add: [{ $ifNull: ["$ratingCount", 0] }, 1] },
+                  ],
+                },
+                2,
+              ],
+            },
+            reliabilityScore: {
+              $round: [
+                {
+                  $min: [
+                    100,
+                    {
+                      $max: [
+                        0,
+                        {
+                          $add: [
+                            { $multiply: [{ $ifNull: ["$reliabilityScore", 100] }, 0.98] },
+                            rating * 20 * 0.02,
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+                2,
+              ],
+            },
+          },
+        },
+      ],
+      { new: true }
+    );
+
+    if (!node) {
+      await TestingTask.updateOne(
+        { _id: ratedTask._id, "clientRating.ratedAt": ratedTask.clientRating.ratedAt },
+        { $unset: { clientRating: 1 } }
+      );
+      return res.status(404).json({ message: "Assigned node not found" });
+    }
+
+    return res.status(201).json({
+      message: "Node rating recorded",
+      rating: ratedTask.clientRating,
+      nodeRating: {
+        average: node.ratingAverage,
+        count: node.ratingCount,
+        reliabilityScore: node.reliabilityScore,
+      },
+    });
+  } catch (error) {
+    if (ratedTask) {
+      await TestingTask.updateOne(
+        { _id: ratedTask._id, "clientRating.ratedAt": ratedTask.clientRating.ratedAt },
+        { $unset: { clientRating: 1 } }
+      ).catch(() => {});
+    }
+    return res.status(500).json({
+      message: "Failed to record node rating",
       error: error.message,
     });
   }
@@ -279,6 +535,7 @@ export const completeTask = async (req, res) => {
       taskId: task._id,
       amount: nodeReward,
       description: `Node dynamic reward for task ${task._id} (${bandwidthUsedMB}MB processed)`,
+      withdrawable: true,
     });
 
     // Record BandwidthUsage

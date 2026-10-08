@@ -10,7 +10,8 @@ def health():
     return jsonify({
         "service": "NetShare ML Ranking Microservice",
         "status": "online",
-        "model": "RandomForestRegressor",
+        "model": "synthetic RandomForestRegressor" if ranker.model is not None else "analytical fallback",
+        "trainingData": "synthetic" if ranker.model is not None else "none",
         "features": ["latency", "bandwidth", "reliability", "successRate"],
     }), 200
 

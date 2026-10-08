@@ -2,13 +2,17 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'socket_service.dart';
 import 'node_service.dart';
+import 'vpn_service.dart';
 import '../core/constants/api_constants.dart';
 
 class ForegroundNodeService {
   static bool _isRunning = false;
-  static final ValueNotifier<bool> isRunningNotifier = ValueNotifier<bool>(false);
+  static final ValueNotifier<bool> isRunningNotifier = ValueNotifier<bool>(
+    false,
+  );
   static final List<String> executionLogs = [];
-  static final ValueNotifier<List<String>> logsNotifier = ValueNotifier<List<String>>([]);
+  static final ValueNotifier<List<String>> logsNotifier =
+      ValueNotifier<List<String>>([]);
 
   static bool get isRunning => _isRunning;
 
@@ -20,6 +24,18 @@ class ForegroundNodeService {
     isRunningNotifier.value = true;
     _addLog("Starting NetShare Mobile Node Agent...");
 
+    var vpnPermission = await NetShareVpnBridge.checkPermission();
+    if (!vpnPermission) {
+      _addLog('Android VPN permission is required for secure task routing.');
+      vpnPermission = await NetShareVpnBridge.requestPermission();
+    }
+    if (!vpnPermission) {
+      _isRunning = false;
+      isRunningNotifier.value = false;
+      _addLog('Node Agent start cancelled: VPN permission denied.');
+      throw StateError('Android VPN permission is required');
+    }
+
     try {
       // 1. Notify control plane that participation session is active
       await NodeService.startParticipation();
@@ -29,22 +45,21 @@ class ForegroundNodeService {
     }
 
     // Determine server URL (stripping '/api' from ApiConstants.baseUrl)
-    final serverUrl = customServerUrl ??
-        ApiConstants.baseUrl.replaceAll('/api', '');
+    final serverUrl =
+        customServerUrl ?? ApiConstants.baseUrl.replaceAll('/api', '');
 
     NodeSocketService.onLog = (log) {
       _addLog(log);
     };
 
     NodeSocketService.onStatusChange = (isOnline) {
-      _addLog(isOnline ? "Node Agent Status: ONLINE" : "Node Agent Status: OFFLINE");
+      _addLog(
+        isOnline ? "Node Agent Status: ONLINE" : "Node Agent Status: OFFLINE",
+      );
     };
 
     // 2. Connect real-time socket
-    await NodeSocketService.connect(
-      serverUrl: serverUrl,
-      apiKey: apiKey,
-    );
+    await NodeSocketService.connect(serverUrl: serverUrl, apiKey: apiKey);
   }
 
   /// Stops the node background worker and disconnects
@@ -52,7 +67,7 @@ class ForegroundNodeService {
     if (!_isRunning) return;
 
     _addLog("Stopping NetShare Node Agent...");
-    NodeSocketService.disconnect();
+    await NodeSocketService.disconnect();
 
     try {
       await NodeService.stopParticipation();

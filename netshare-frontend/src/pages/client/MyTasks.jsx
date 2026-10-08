@@ -1,22 +1,22 @@
-import { useEffect, useState } from "react";
-import { RefreshCcw, Search, ExternalLink } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Download, RefreshCcw, Search, ExternalLink, Star } from "lucide-react";
 import axiosInstance from "../../api/axiosInstance";
 import ClientLayout from "../../layouts/ClientLayout";
 import "./MyTasks.css";
 
 function MyTasks() {
   const [tasks, setTasks] = useState([]);
-  const [filteredTasks, setFilteredTasks] = useState([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [ratings, setRatings] = useState({});
+  const [actionMessage, setActionMessage] = useState("");
 
   const fetchTasks = async () => {
     try {
       setLoading(true);
       const res = await axiosInstance.get("/tasks/my-tasks");
       setTasks(res.data.tasks || []);
-      setFilteredTasks(res.data.tasks || []);
     } catch (error) {
       console.log("Tasks error:", error.response?.data || error.message);
     } finally {
@@ -24,11 +24,59 @@ function MyTasks() {
     }
   };
 
-  useEffect(() => {
-    fetchTasks();
-  }, []);
+  const downloadReport = async (task) => {
+    try {
+      setActionMessage("");
+      const res = await axiosInstance.get(`/tasks/${task._id}/report.csv`, {
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(res.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `netshare-task-${task._id}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setActionMessage(error.response?.data?.message || "Report download failed");
+    }
+  };
+
+  const submitRating = async (task) => {
+    const rating = Number(ratings[task._id] || 5);
+    try {
+      setActionMessage("");
+      await axiosInstance.post(`/tasks/${task._id}/rating`, { rating });
+      setActionMessage("Node rating saved.");
+      await fetchTasks();
+    } catch (error) {
+      setActionMessage(error.response?.data?.message || "Rating failed");
+    }
+  };
 
   useEffect(() => {
+    let active = true;
+    const refresh = () => axiosInstance
+      .get("/tasks/my-tasks")
+      .then((res) => {
+        if (active) setTasks(res.data.tasks || []);
+      })
+      .catch((error) => {
+        if (active) setActionMessage(error.response?.data?.message || 'Could not refresh task status');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    refresh();
+    const timer = setInterval(refresh, 10000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const filteredTasks = useMemo(() => {
     let data = [...tasks];
 
     if (status !== "all") {
@@ -44,7 +92,7 @@ function MyTasks() {
       );
     }
 
-    setFilteredTasks(data);
+    return data;
   }, [search, status, tasks]);
 
   return (
@@ -85,6 +133,7 @@ function MyTasks() {
         </div>
 
         <div className="mytasks-card">
+          {actionMessage && <div className="task-action-message">{actionMessage}</div>}
           {loading ? (
             <div className="task-loading">Loading tasks...</div>
           ) : (
@@ -99,13 +148,14 @@ function MyTasks() {
                     <th>Cost</th>
                     <th>Assigned Node</th>
                     <th>Created</th>
+                    <th>Report & Rating</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {filteredTasks.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="empty-cell">
+                      <td colSpan="8" className="empty-cell">
                         No tasks found.
                       </td>
                     </tr>
@@ -132,6 +182,49 @@ function MyTasks() {
                             : "Not assigned"}
                         </td>
                         <td>{new Date(task.createdAt).toLocaleDateString()}</td>
+                        <td>
+                          {["completed", "settled"].includes(task.status) ? (
+                            <div className="task-actions">
+                              <button
+                                type="button"
+                                onClick={() => downloadReport(task)}
+                                title="Download CSV report"
+                              >
+                                <Download size={15} /> CSV
+                              </button>
+                              {task.clientRating?.rating ? (
+                                <span className="rated-label">
+                                  <Star size={14} fill="currentColor" />
+                                  {task.clientRating.rating}/5
+                                </span>
+                              ) : (
+                                <div className="rating-control">
+                                  <select
+                                    aria-label={`Rate node for task ${task._id}`}
+                                    value={ratings[task._id] || 5}
+                                    onChange={(event) =>
+                                      setRatings((current) => ({
+                                        ...current,
+                                        [task._id]: event.target.value,
+                                      }))
+                                    }
+                                  >
+                                    {[5, 4, 3, 2, 1].map((value) => (
+                                      <option key={value} value={value}>
+                                        {value}/5
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button type="button" onClick={() => submitRating(task)}>
+                                    <Star size={15} /> Rate
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="action-pending">Available when complete</span>
+                          )}
+                        </td>
                       </tr>
                     ))
                   )}

@@ -12,34 +12,33 @@ void main() {
     log.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
-      log.add(methodCall);
+          log.add(methodCall);
 
-      switch (methodCall.method) {
-        case 'checkPermission':
-          return true;
-        case 'requestPermission':
-          return true;
-        case 'startService':
-          return <String, dynamic>{
-            'status': 'connecting',
-            'virtualIp': methodCall.arguments['virtualIp'] ?? '10.254.1.2',
-            'routingScope': '${methodCall.arguments['subnetRoute']}/${methodCall.arguments['prefixLength']}',
-          };
-        case 'stopService':
-          return <String, dynamic>{
-            'status': 'disconnected',
-          };
-        case 'getStatus':
-          return <String, dynamic>{
-            'status': 'connected',
-            'hasPermission': true,
-            'routingScope': '10.254.1.0/24',
-            'isRunning': true,
-          };
-        default:
-          return null;
-      }
-    });
+          switch (methodCall.method) {
+            case 'checkPermission':
+              return true;
+            case 'requestPermission':
+              return true;
+            case 'startService':
+              return <String, dynamic>{
+                'status': 'connecting',
+                'virtualIp': methodCall.arguments['virtualIp'] ?? '10.254.1.2',
+                'routingScope':
+                    '${methodCall.arguments['subnetRoute']}/${methodCall.arguments['prefixLength']}',
+              };
+            case 'stopService':
+              return <String, dynamic>{'status': 'disconnected'};
+            case 'getStatus':
+              return <String, dynamic>{
+                'status': 'connected',
+                'hasPermission': true,
+                'routingScope': '10.254.1.0/24',
+                'isRunning': true,
+              };
+            default:
+              return null;
+          }
+        });
   });
 
   tearDown(() {
@@ -63,20 +62,29 @@ void main() {
       expect(hasPermission, isFalse);
     });
 
-    test('requestPermission returns true when user grants permission', () async {
-      final granted = await NetShareVpnBridge.requestPermission();
-      expect(granted, isTrue);
-      expect(log, hasLength(1));
-      expect(log.first.method, 'requestPermission');
-    });
+    test(
+      'requestPermission returns true when user grants permission',
+      () async {
+        final granted = await NetShareVpnBridge.requestPermission();
+        expect(granted, isTrue);
+        expect(log, hasLength(1));
+        expect(log.first.method, 'requestPermission');
+      },
+    );
 
-    test('requestPermission returns false when user denies permission', () async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (MethodCall call) async => false);
+    test(
+      'requestPermission returns false when user denies permission',
+      () async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+              channel,
+              (MethodCall call) async => false,
+            );
 
-      final granted = await NetShareVpnBridge.requestPermission();
-      expect(granted, isFalse);
-    });
+        final granted = await NetShareVpnBridge.requestPermission();
+        expect(granted, isFalse);
+      },
+    );
 
     test('startService sends narrow routing scope parameters', () async {
       final result = await NetShareVpnBridge.startService(
@@ -84,6 +92,11 @@ void main() {
         virtualIp: '10.254.1.5',
         subnetRoute: '10.254.1.0',
         prefixLength: 24,
+        routingSessionId: 'route-1',
+        authorizedHost: 'example.com',
+        authorizedPort: 443,
+        authorizedMethod: 'HEAD',
+        authorizedIps: const ['93.184.216.34'],
       );
 
       expect(log, hasLength(1));
@@ -92,6 +105,11 @@ void main() {
       expect(log.first.arguments['virtualIp'], '10.254.1.5');
       expect(log.first.arguments['subnetRoute'], '10.254.1.0');
       expect(log.first.arguments['prefixLength'], 24);
+      expect(log.first.arguments['routingSessionId'], 'route-1');
+      expect(log.first.arguments['authorizedHost'], 'example.com');
+      expect(log.first.arguments['authorizedPort'], 443);
+      expect(log.first.arguments['authorizedMethod'], 'HEAD');
+      expect(log.first.arguments['authorizedIps'], ['93.184.216.34']);
 
       expect(result['status'], 'connecting');
       expect(result['virtualIp'], '10.254.1.5');
@@ -117,12 +135,15 @@ void main() {
 
     test('getStatus handles revoked state', () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (MethodCall call) async => <String, dynamic>{
-        'status': 'revoked',
-        'hasPermission': false,
-        'routingScope': '10.254.1.0/24',
-        'isRunning': false,
-      });
+          .setMockMethodCallHandler(
+            channel,
+            (MethodCall call) async => <String, dynamic>{
+              'status': 'revoked',
+              'hasPermission': false,
+              'routingScope': '10.254.1.0/24',
+              'isRunning': false,
+            },
+          );
 
       final status = await NetShareVpnBridge.getStatus();
       expect(status.state, VpnState.revoked);

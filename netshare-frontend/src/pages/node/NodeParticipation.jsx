@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
-  Activity,
   Play,
   Square,
   Save,
@@ -63,7 +62,7 @@ function NodeParticipation() {
   };
 
   useEffect(() => {
-    fetchNodeData();
+    void Promise.resolve().then(fetchNodeData);
   }, []);
 
   const handleStart = async () => {

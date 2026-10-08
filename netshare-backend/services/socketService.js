@@ -12,8 +12,14 @@ import ParticipationSession from "../models/ParticipationSession.js";
 import { calculateReward } from "./rewardService.js";
 import { addCredits } from "./walletService.js";
 import logger from '../lib/logger.js';
+import config from '../config/env.js';
 import { registerSignalingHandlers } from './webrtcSignalingService.js';
 import { startSessionCleanup } from './routingSessionService.js';
+import {
+  acceptAndroidSecureAnswer,
+  acceptAndroidSecureIceCandidate,
+  abortAndroidRoutesForNode,
+} from './secureTaskRoutingService.js';
 
 // In-memory tracking of active node connections: Map<nodeIdString, { socketId, socket, node, connectedAt, lastHeartbeatAt }>
 const connectedNodes = new Map();
@@ -51,6 +57,13 @@ export const authenticateSocketHandshake = async (socket, next) => {
       if (!node) {
         return next(new Error("Invalid Node API Key"));
       }
+      if (!node.userId?.isVerified || node.userId.status === 'blocked' ||
+        !['node_participant', 'both'].includes(node.userId.role)) {
+        return next(new Error('Node account is not authorized'));
+      }
+      if (config.isProduction && !await ParticipationSession.exists({ deviceId: node._id, status: 'active' })) {
+        return next(new Error('Start participation before connecting a node'));
+      }
       socket.socketType = "node";
       socket.node = node;
       socket.user = node.userId;
@@ -69,6 +82,7 @@ export const authenticateSocketHandshake = async (socket, next) => {
       if (user.status === "blocked") {
         return next(new Error("Account is blocked"));
       }
+      if (!user.isVerified) return next(new Error('Account is not verified'));
 
       socket.user = user;
 
@@ -81,6 +95,10 @@ export const authenticateSocketHandshake = async (socket, next) => {
         const node = await NodeDevice.findOne(queryFilter);
 
         if (node) {
+          if (!['node_participant', 'both'].includes(user.role)) return next(new Error('Node role required'));
+          if (config.isProduction && !await ParticipationSession.exists({ deviceId: node._id, status: 'active' })) {
+            return next(new Error('Start participation before connecting a node'));
+          }
           socket.socketType = "node";
           socket.node = node;
           return next();
@@ -173,6 +191,7 @@ export const disconnectNode = async (socket) => {
     const currentEntry = connectedNodes.get(nodeId);
 
     if (currentEntry && currentEntry.socketId === socket.id) {
+      await abortAndroidRoutesForNode(nodeId, 'node_disconnected');
       connectedNodes.delete(nodeId);
 
       await NodeDevice.findByIdAndUpdate(nodeId, {
@@ -190,38 +209,13 @@ export const disconnectNode = async (socket) => {
 };
 
 /**
- * Send task payload to a designated node agent
+ * Explicitly disabled legacy task transport. Production callers must create a
+ * RoutingSession and use startAndroidSecureRouting; there is no fallback.
  */
-export const sendTaskToNode = async (nodeId, taskData) => {
-  const entry = connectedNodes.get(nodeId.toString());
-  if (!entry || !entry.socket.connected) {
-    return { success: false, reason: "Node not currently connected to real-time network" };
-  }
-
-  const payload = {
-    taskId: taskData.taskId || taskData._id,
-    target: taskData.targetUrl || taskData.target,
-    taskType: taskData.serviceType || taskData.taskType,
-    limits: {
-      executionLimit: taskData.executionLimit || 1,
-      timeoutMs: taskData.timeoutMs || 30000,
-    },
-    clientId: taskData.clientId,
-    assignedAt: new Date().toISOString(),
-  };
-
-  entry.socket.emit("task_assigned", payload);
-
-  // Broadcast assignment to admin and client
-  if (ioInstance) {
-    ioInstance.to("admin_room").emit("task_assigned_event", { nodeId, task: payload });
-    if (taskData.clientId) {
-      ioInstance.to(`client_${taskData.clientId}`).emit("task_assigned_event", { nodeId, task: payload });
-    }
-  }
-
-  return { success: true, socketId: entry.socketId };
-};
+export const sendTaskToNode = async () => ({
+  success: false,
+  reason: 'LEGACY_SOCKET_TASK_TRANSPORT_DISABLED',
+});
 
 /**
  * Broadcast node status change to rooms
@@ -274,27 +268,14 @@ export const receiveNodeTelemetry = async (nodeId, telemetryData) => {
       timestamp: new Date(),
     });
 
-    // 2. Record BandwidthUsage ledger if bandwidth was reported
-    if (uploadBandwidthMB > 0 || downloadBandwidthMB > 0 || currentBandwidth > 0) {
-      await BandwidthUsage.create({
-        nodeId,
-        sessionId: telemetryData.sessionId || "",
-        taskId: telemetryData.taskId || null,
-        uploadBandwidthMB: Number(uploadBandwidthMB || 0),
-        downloadBandwidthMB: Number(downloadBandwidthMB || currentBandwidth),
-        totalBandwidthMB: Number(uploadBandwidthMB || 0) + Number(downloadBandwidthMB || currentBandwidth),
-        networkAvailability: "available",
-        timestamp: new Date(),
-      });
-    }
-
-    // 3. Update NodeDevice live properties
-    await NodeDevice.findByIdAndUpdate(nodeId, {
-      lastSeenAt: new Date(),
-      latencyMs: currentLatency,
-      status: status === "busy" ? "busy" : "active",
-      $inc: { usedBandwidthMB: currentBandwidth },
-    });
+    // Telemetry is an observational snapshot, not a billable delta. Replays
+    // cannot inflate usage or reactivate a paused/draining/inactive node.
+    await NodeDevice.findByIdAndUpdate(nodeId, [
+      { $set: { lastSeenAt: new Date(), latencyMs: currentLatency,
+        status: { $cond: [{ $in: ['$status', ['active', 'busy']] },
+          { $cond: [{ $gte: ['$currentActiveTasks', '$maxConcurrentTasks'] }, 'busy', 'active'] }, '$status'] },
+      } },
+    ]);
 
     // 4. Stream live update to interested rooms
     if (ioInstance) {
@@ -359,8 +340,15 @@ const startHeartbeatEvictionMonitor = () => {
 const handleTaskStarted = async (socket, data) => {
   try {
     const { taskId } = data;
-    const task = await TestingTask.findById(taskId);
-    if (!task) return;
+    const task = await TestingTask.findOne({
+      _id: taskId,
+      assignedNodeId: socket.node?._id,
+      status: 'assigned',
+    });
+    if (!task) {
+      logger.warn({ taskId, nodeId: socket.node?._id }, 'Rejected task_started from unassigned node or invalid state');
+      return;
+    }
 
     task.status = "running";
     await task.save();
@@ -402,8 +390,11 @@ const handleTaskCompleted = async (socket, data) => {
       downloadBandwidthMB = 0,
     } = data;
 
-    const task = await TestingTask.findById(taskId);
-    if (!task) return;
+    const task = await TestingTask.findOne({ _id: taskId, assignedNodeId: socket.node?._id });
+    if (!task) {
+      logger.warn({ taskId, nodeId: socket.node?._id }, 'Rejected task_completed from unassigned node');
+      return;
+    }
 
     // Idempotency: if task already completed/settled, do not process again
     if (['completed', 'settled', 'failed'].includes(task.status)) {
@@ -450,6 +441,8 @@ const handleTaskCompleted = async (socket, data) => {
       taskId: task._id,
       amount: finalNodeReward,
       description: `Reward for task ${task._id} (${safeBandwidth}MB processed, Q=${rewardCalculation.breakdown.qualityScore})`,
+      idempotencyKey: `task-reward:${task._id}:${node._id}`,
+      withdrawable: true,
     });
 
     // 4. Record BandwidthUsage
@@ -623,13 +616,36 @@ export const initSocketServer = async (httpServer) => {
         await receiveNodeTelemetry(socket.node._id, data);
       });
 
-      // Task progress events from agent
-      socket.on("task_started", async (data) => {
-        await handleTaskStarted(socket, data);
+      // Production task payloads/results are DataChannel-only. Socket.IO is
+      // retained strictly for authenticated WebRTC signaling and telemetry.
+      socket.on('secure_route:answer', async (data) => {
+        try {
+          await acceptAndroidSecureAnswer({
+            ...data,
+            nodeId: socket.node._id,
+          });
+        } catch (error) {
+          socket.emit('secure_route:error', {
+            routingSessionId: data?.routingSessionId,
+            code: error.code || 'ANSWER_REJECTED',
+            message: error.message,
+          });
+        }
       });
 
-      socket.on("task_completed", async (data) => {
-        await handleTaskCompleted(socket, data);
+      socket.on('secure_route:ice_candidate', async (data) => {
+        try {
+          await acceptAndroidSecureIceCandidate({
+            ...data,
+            nodeId: socket.node._id,
+          });
+        } catch (error) {
+          socket.emit('secure_route:error', {
+            routingSessionId: data?.routingSessionId,
+            code: error.code || 'ICE_REJECTED',
+            message: error.message,
+          });
+        }
       });
 
       // WebRTC signaling events for this node socket

@@ -180,13 +180,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               oldPassword: oldPw,
                               newPassword: newPw,
                             );
-                            if (!mounted) return;
+                            if (!context.mounted) return;
                             Navigator.pop(context);
                             showMessage('Password changed successfully');
                           } catch (e) {
                             showMessage(e.toString().replaceAll('Exception:', '').trim());
                           } finally {
-                            if (mounted) setStateDialog(() => isChanging = false);
+                            if (mounted) {
+                              setStateDialog(() => isChanging = false);
+                            }
                           }
                         },
                   style: ElevatedButton.styleFrom(
@@ -232,7 +234,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: color.withOpacity(0.12),
+            backgroundColor: color.withValues(alpha: 0.12),
             child: Icon(icon, color: color),
           ),
           const SizedBox(width: 14),
@@ -346,7 +348,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   vertical: 7,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.18),
+                                  color: Colors.white.withValues(alpha: 0.18),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(

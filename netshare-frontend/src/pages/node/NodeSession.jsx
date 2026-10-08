@@ -1,13 +1,11 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
-  Radio,
   Clock,
   HardDrive,
   Activity,
   Award,
   Wifi,
   ShieldCheck,
-  CheckCircle,
   Play,
   RotateCcw,
   Zap,
@@ -20,8 +18,6 @@ import ErrorMessage from "../../components/common/ErrorMessage";
 import {
   getCurrentSession,
   startParticipation,
-  startTaskExecution,
-  completeTaskExecution,
 } from "../../api/nodeApi";
 import "./NodeSession.css";
 
@@ -30,7 +26,6 @@ function NodeSession() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
-  const [taskNotice, setTaskNotice] = useState("");
 
   const fetchSession = async () => {
     try {
@@ -45,7 +40,7 @@ function NodeSession() {
   };
 
   useEffect(() => {
-    fetchSession();
+    void Promise.resolve().then(fetchSession);
     // 5-second real-time polling
     const interval = setInterval(fetchSession, 5000);
     return () => clearInterval(interval);
@@ -74,35 +69,6 @@ function NodeSession() {
     }
   };
 
-  const handleRunTask = async (taskId) => {
-    try {
-      setActionLoading(true);
-      setTaskNotice("Starting test task execution...");
-      await startTaskExecution(taskId);
-      await fetchSession();
-
-      // Execute task and wait for result
-      setTimeout(async () => {
-        try {
-          await completeTaskExecution(taskId, {
-            bandwidthUsedMB: 45,
-            latencyMs: sessionData?.latency || 42,
-            packetLoss: 0,
-            successRate: 100,
-          });
-          setTaskNotice("Task executed and settled! Reward credits disbursed.");
-          await fetchSession();
-        } catch {
-          // ignore
-        } finally {
-          setActionLoading(false);
-        }
-      }, 2500);
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to execute task");
-      setActionLoading(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -119,12 +85,6 @@ function NodeSession() {
     <NodeLayout>
       <div className="session-page">
         {error && <ErrorMessage message={error} onRetry={fetchSession} />}
-        {taskNotice && (
-          <div className="session-notice-banner">
-            <CheckCircle size={18} />
-            <span>{taskNotice}</span>
-          </div>
-        )}
 
         {/* Live Status Header */}
         <div className="session-hero-header">
@@ -183,9 +143,9 @@ function NodeSession() {
           <StatsCard
             icon={Activity}
             title="Latency & Ping"
-            value={`${sessionData?.latency || 45} ms`}
+            value={sessionData?.latency != null ? `${sessionData.latency} ms` : 'Not measured'}
             subtitle="Round-trip response time"
-            badge="Low Ping"
+            badge="Measured telemetry"
             badgeType="success"
             color="purple"
           />
@@ -221,7 +181,7 @@ function NodeSession() {
                 <h3>Network Quality Diagnostics</h3>
               </div>
               <span className={`quality-pill quality-${String(sessionData?.networkQuality).toLowerCase()}`}>
-                {sessionData?.networkQuality || "Good"}
+                {sessionData?.networkQuality || "Not measured"}
               </span>
             </div>
 
@@ -250,7 +210,7 @@ function NodeSession() {
               <div className="spec-item">
                 <span className="spec-label">Packet Loss</span>
                 <span className="spec-value text-green">
-                  {sessionData?.packetLoss || 0}% Loss
+                  {sessionData?.packetLoss != null ? `${sessionData.packetLoss}% Loss` : 'Not measured'}
                 </span>
               </div>
 
@@ -265,7 +225,7 @@ function NodeSession() {
               <div className="spec-item">
                 <span className="spec-label">Reliability Index</span>
                 <span className="spec-value text-purple">
-                  {sessionData?.node?.reliabilityScore || 100}%
+                  {sessionData?.node?.reliabilityScore != null ? `${sessionData.node.reliabilityScore}%` : 'Not measured'}
                 </span>
               </div>
             </div>
@@ -319,16 +279,7 @@ function NodeSession() {
                 </div>
 
                 <div className="task-run-bar">
-                  <button
-                    className="execute-task-btn"
-                    onClick={() => handleRunTask(assignedTask.taskId?._id)}
-                    disabled={actionLoading}
-                  >
-                    <Play size={16} />
-                    {actionLoading
-                      ? "Executing Test..."
-                      : "Execute Task"}
-                  </button>
+                  <p>Tasks execute automatically on the authorized Android node through WebRTC and controlled VPN routing. This page only displays recorded results.</p>
                 </div>
               </div>
             ) : (

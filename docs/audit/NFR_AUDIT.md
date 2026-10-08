@@ -1,108 +1,78 @@
-# Non-Functional Requirements Audit
+# Non-Functional Requirements Audit — Phase 8
 
-## Legend
-- **MET**: The requirement is fully implemented and passes inspection/testing.
-- **PARTIAL**: The requirement is partially implemented, but some features, components, or edge cases are missing.
-- **NOT_MET**: The requirement is not implemented at all, or fails significantly.
-- **UNVERIFIED**: The requirement cannot be verified due to lack of benchmark test results or specific testing environments.
+Updated: 2026-10-08. Official source: `NETSHARE_SRS.md` §2.7–2.8 and operating-environment/design constraints. This audit supersedes the pre-routing audit.
 
-## 2.7.1 Reliability
-| ID | Requirement | Status | Notes |
+There are **23 strict REL/USE/PER/SEC NFRs: 12 MET, 5 PARTIAL, 6 UNVERIFIED**. There are separately **32 UI/SI/CI/OE/CON interface/environment/constraint statements**. They are not extra strict NFRs. MET refers only to the explicitly evidenced scope; it is not full deployment or hardware certification. NOT_MET denotes an observed contradiction, not an unavailable environment.
+
+## Official strict NFRs
+
+| ID | Official requirement | Status | Evidence / limitation |
 |---|---|---|---|
-| REL-1 | The system shall log all task failures, connection interruptions, and settlement errors for audit and analysis purposes. | PARTIAL | Task failures logged in TaskResult/logs; settlement errors partially logged; connection interruption logging incomplete (no WebRTC session logging exists) |
-| REL-2 | The system shall attempt automatic recovery for temporary connection failures during active task execution. | PARTIAL | BullMQ retry (3 attempts, exponential backoff); 15s timeout recovery in taskWorker. However, WebRTC/VpnService session recovery not implemented since secure routing doesn't exist yet. |
-| REL-3 | At least 95% of successfully assigned tasks shall reach a terminal state of Completed or Failed without remaining indefinitely in an intermediate state. | PARTIAL | Timeout recovery exists (15s re-queue); but no comprehensive verification test has been run to measure whether 95% target is met. |
-| REL-4 | The system shall preserve transaction history and task logs in persistent storage to avoid loss of billing and monitoring records. | MET | CreditTransaction records are append-only in MongoDB. Task records, TaskResult, BandwidthUsage all in persistent MongoDB. NodeHeartbeat/NodeTelemetry have TTL indexes (7d/14d) which means some monitoring data expires. |
-| REL-5 | In case of failure during credit settlement, the system shall mark the transaction for administrative review instead of silently discarding it. | PARTIAL | Settlement errors caught in try/catch and logged. No dedicated 'settlement_failed' status or admin review queue exists. Wallet operations use sequential save() without MongoDB transactions, so partial failure is possible. |
+| REL-1 | The system shall log all task failures, connection interruptions, and settlement errors for audit and analysis purposes. | MET | Task/session failure logs, routing state histories and settlement-review alerts; phase2/phase8 failure tests. |
+| REL-2 | The system shall attempt automatic recovery for temporary connection failures during active task execution. | PARTIAL | Bounded ICE recovery and Redis/Mongo recovery exist; local failure/restart tests pass. Android network interruption recovery remains BLOCKED. |
+| REL-3 | At least 95% of successfully assigned tasks shall reach a terminal state of Completed or Failed without remaining indefinitely in an intermediate state. | UNVERIFIED | Durable expiry/orphan sweeper exists; no representative assigned-task cohort establishes the required ≥95% terminal-state rate. |
+| REL-4 | The system shall preserve transaction history and task logs in persistent storage to avoid loss of billing and monitoring records. | MET | Real MongoDB replica-set rollback/commit and actual process-restart persistence tests pass; monitoring TTL retention is intentional. |
+| REL-5 | In case of failure during credit settlement, the system shall mark the transaction for administrative review instead of silently discarding it. | MET | Injected ledger failure rolls settlement back and creates one admin-review AnomalyAlert; phase8 test. |
+| USE-1 | The system shall allow a Node Participant to start or stop participation using no more than one primary action from the participation dashboard. | MET | One primary Start/Stop control in participation screens; source/widget evidence, not physical-device usability certification. |
+| USE-2 | The system shall allow a Platform Client to submit a testing task in no more than five main interaction steps after login. | MET | Task submission exposes URL/service/region/count/quote with a single submit; Flutter form tests. ≤5 principal interaction groups. |
+| USE-3 | The system shall display wallet balance, task status, and node activity using clear labels and dashboard-style summaries consistent with the proposed mockups. | MET | Dashboard labels and stored wallet/task summaries; Flutter dashboard/list/details/wallet tests. |
+| USE-4 | The user interface shall use readable labels, consistent navigation, and simple controls to support users with basic digital literacy. | UNVERIFIED | Navigation/readable labels inspected; no representative basic-digital-literacy usability study. |
+| USE-5 | Important system messages such as errors, order updates, payment verification results, and participation status changes shall be shown in clear and understandable language. | MET | Owned in-app notifications/error/loading states; phase6 notification tests and Flutter authorization/error tests. |
+| PER-1 | 95% of user login requests shall be processed within 3 seconds under normal network conditions. | UNVERIFIED | Local production API p50 581.08 ms / p95 1229.54 ms (100 samples) passes 3 s locally; normal deployed-network conditions are not established. |
+| PER-2 | 95% of dashboard pages shall load within 4 seconds over a stable 20 Mbps internet connection. | UNVERIFIED | Dashboard API p95 65.28 ms is not page loading. No 20 Mbps browser page-load benchmark. |
+| PER-3 | 95% of task submission requests shall be acknowledged by the server within 3 seconds after the client submits the task. | UNVERIFIED | Local acknowledgement p50 123.16 ms / p95 323.36 ms passes 3 s locally; deployed network/workload not tested. |
+| PER-4 | The system shall refresh task execution status for active tasks at least once every 10 seconds. | PARTIAL | Web MyTasks and Flutter active task screens schedule 10 s refresh. Browser/device timing under real active load is UNVERIFIED. |
+| PER-5 | The system shall display current session statistics for an active node within 5 seconds of receiving updated monitoring data. | UNVERIFIED | Polling/telemetry code exists; actual mobile update-to-render ≤5 s not measured (no Android device/AVD). |
+| PER-6 | The system shall support concurrent operation of multiple nodes and clients without causing incorrect task assignment or transaction settlement conflicts. | MET | Bounded real DB test: 2 clients, 3 nodes, 6 tasks, 18 simultaneous claims; 12 result duplicates and financial races pass. Not fleet-scale certification. |
+| SEC-1 | The system shall ensure that only authenticated and authorized users can access protected platform functions. | MET | Verified/blocked/role/ownership guards; production API-key session consent; OTP lockout wired and tested; phase0/phase5/phase6/phase8. |
+| SEC-2 | The system shall protect communication between the server and participating nodes against unauthorized interception or manipulation. | PARTIAL | Real localhost DTLS DataChannel works; production TLS ingress, TURN and NAT-separated interception resistance are UNVERIFIED. |
+| SEC-3 | The system shall associate participation sessions with verified devices to reduce misuse from unknown or cloned devices. | PARTIAL | Device ID/API key/session owner/fingerprint binding exists; device attestation and cloned-device resistance are not proven. |
+| SEC-4 | The system shall record suspicious activities such as abnormal traffic, repeated failures, or unusual payment behavior for administrative review. | MET | Rules-v1 alerts/dedup/admin review and audit tests pass; no ML anomaly-accuracy claim. |
+| SEC-5 | The system shall restrict task execution to authorized and lawful requests only. | PARTIAL | Host/port/GET-HEAD/private/metadata/redirect authorization regression tests pass; real Android TUN enforcement is BLOCKED. Lawful usage also requires policy/operator review. |
+| SEC-6 | Sensitive wallet, transaction, and account records shall not be exposed to unauthorized users. | MET | Wallet/payment/dispute/task/session ownership tests pass; node API key/session token redaction verified. |
+| SEC-7 | Administrative actions affecting user accounts, transactions, or system settings shall be traceable through system logs. | MET | Admin payment/order/dispute/alert/user actions use recorded audit trails; atomic audit-failure tests pass. |
 
-## 2.7.2 Usability
-| ID | Requirement | Status | Notes |
+## Official interfaces, environment and constraints
+
+| ID | Official requirement | Status | Evidence / limitation |
 |---|---|---|---|
-| USE-1 | The system shall allow a Node Participant to start or stop participation using no more than one primary action from the participation dashboard. | MET | Start Participation and Stop Participation are single-button actions on both React web and Flutter mobile dashboards. |
-| USE-2 | The system shall allow a Platform Client to submit a testing task in no more than five main interaction steps after login. | MET | Steps: 1) Navigate to Submit Task, 2) Enter URL, 3) Select service type, 4) Select region/execution limit, 5) Submit. Five steps or fewer. |
-| USE-3 | The system shall display wallet balance, task status, and node activity using clear labels and dashboard-style summaries consistent with the proposed mockups. | MET | Client dashboard shows active tasks, completed tasks, credits. Node dashboard shows status, bandwidth, credits. Wallet shows balance and transactions. All use dashboard-style layouts. |
-| USE-4 | The user interface shall use readable labels, consistent navigation, and simple controls to support users with basic digital literacy. | MET | React frontend uses consistent sidebar navigation, clear button labels, form validation messages. Flutter app uses Material Design patterns. |
-| USE-5 | Important system messages such as errors, order updates, payment verification results, and participation status changes shall be shown in clear and understandable language. | PARTIAL | Error messages are descriptive. However, notification system for order updates/payment results is NOT_STARTED. Participation status changes shown in dashboard but no push notifications. |
+| OE-1 | The NetShare mobile application shall operate on Android devices supporting Android API Level 21 or above. | NOT_MET | Final APK declares minSdkVersion 24, not the required Android API 21; actual aapt dump badging evidence. |
+| OE-2 | The NetShare web dashboard shall operate through modern web browsers on desktop or laptop systems for administrative use. | UNVERIFIED | Frontend production build/lint pass; browser compatibility matrix not executed. |
+| OE-3 | The backend server environment shall support Node.js and Express.js for asynchronous API handling and service management. | MET | Actual production Node 24.15.0 / Express process acceptance passes. |
+| OE-4 | The database environment shall use MongoDB to store user records, task records, wallet activity, node monitoring logs, and marketplace data. | MET | Real MongoDB 8.2.7 replica-set task/wallet/log persistence tested. |
+| OE-5 | The secure communication environment shall support WebRTC channels and Android VpnService-based traffic forwarding for controlled request routing through residential nodes. | PARTIAL | Backend native WebRTC works; Android TUN code builds but actual forwarding remains BLOCKED. |
+| OE-6 | The system shall support operation for geographically distributed users and participating nodes in different regions, subject to lawful internet access and local network conditions. | UNVERIFIED | Region eligibility tests pass; no multi-region residential-device deployment. |
+| CON-1 | The backend of the system shall be implemented using Node.js and Express.js to align with the proposed system architecture and asynchronous communication requirements. | MET | Node/Express backend implemented and production-process tested. |
+| CON-2 | The mobile application shall be implemented using Flutter and shall primarily target Android devices within the scope of this project. | MET | Flutter Android build and 50 Flutter tests; debug arm64 artifact only. |
+| CON-3 | The system shall use MongoDB as the primary database for users, tasks, wallets, marketplace data, and activity logs. | MET | MongoDB is the actual primary store used by acceptance tests. |
+| CON-4 | Secure communication and controlled traffic routing shall be limited to mechanisms supported by WebRTC and Android VpnService API. | PARTIAL | Production Socket.IO is signaling-only; WebRTC/TUN mechanism exists but physical Android acceptance is BLOCKED. |
+| CON-5 | The system shall execute only lawful and permitted internet tasks and shall require user consent for controlled request routing through participating devices. | PARTIAL | Start consent/session guards and request scope enforced; actual device consent/revoke and operational lawful-use review remain gates. |
+| CON-6 | The system shall not be designed to bypass regional firewalls or provide unrestricted access to blocked websites. It shall only perform requests permitted by the participating network environment. | MET | No firewall bypass functionality; allowlisted HTTP request executor fails normally on unavailable targets. |
+| CON-7 | Initial payment verification and marketplace order fulfilment may be handled manually by the administrator due to project scope limitations. | MET | Manual admin payment and order workflows tested with explicit fixtures; no external cash/fulfilment proof. |
+| CON-8 | Task assignment and anomaly detection shall use simple rule-based logic with basic machine-learning support instead of large-scale production-grade optimization models. | MET | Basic/synthetic eligible-only ML ranking + JS fallback and explicit rule alerts; no production prediction-accuracy claim. |
+| CON-9 | The system depends on active internet connectivity for both participating nodes and platform clients and therefore cannot operate in offline conditions. | MET | Network-dependent operations; failures surfaced, not simulated as offline success. |
+| CON-10 | The operation of residential node participation is subject to ISP policies and terms of service, which may restrict certain uses of residential internet connections. | UNVERIFIED | ISP terms/legal permissions require operator and participant approval; not a code-test result. |
+| UI-1 | The mobile application shall present dashboard-style views for participation, earnings, wallet, and profile settings. | MET | Flutter node/client dashboards, wallet/profile screens and widget tests. |
+| UI-2 | The admin interface shall present KPI summaries, charts, node health indicators, suspicious activity panels, and user management controls. | PARTIAL | Admin summaries/user/alerts/reports exist; complete charts/current network/bandwidth KPIs incomplete. |
+| UI-3 | The marketplace interface shall display product cards including product name, description, and required credits. | MET | Web/Flutter catalogue/product credit displays implemented. |
+| UI-4 | Consistent button labels, navigation patterns, and status indicators shall be used across all system screens. | MET | Consistent controls/status labels inspected; Flutter role/navigation tests. |
+| UI-5 | The user interface shall be designed to accommodate future localization and region-based content display where needed. | PARTIAL | Region content fields exist; localization infrastructure/resources not implemented. |
+| SI-1 | The system shall interface with a MongoDB database to store user records, task data, node activity logs, transactions, and marketplace information. | MET | Real Mongo persistence and transactions exercised. |
+| SI-2 | The system shall use Node.js and Express.js backend services to provide APIs for authentication, task management, wallet operations, and admin functions. | MET | Actual Express HTTP workflow and backend tests pass. |
+| SI-3 | The system shall interface with WebRTC components for secure peer communication between backend services and participating nodes. | MET | Actual native WebRTC reliable DataChannel loopback integration passes; not NAT/device proof. |
+| SI-4 | The system shall interface with Android VpnService API for controlled traffic forwarding through participating Android devices. | PARTIAL | Android VpnService/TUN implementation compiles; physical forwarding validation BLOCKED. |
+| SI-5 | The system shall support integration with payment verification workflows for credit top-ups and withdrawals. | MET | Manual top-up/withdrawal integration and atomic race tests pass. |
+| SI-6 | The system shall support notification services for alerts related to orders, wallet updates, and task status changes. | MET | Durable in-app notifications, read/unread ownership and reconciliation tested. |
+| CI-1 | The system shall use internet-based communication between mobile devices, clients, backend servers, and the admin dashboard. | PARTIAL | Local HTTP/HTTPS/DataChannel communication works; external multi-device deployed environment unverified. |
+| CI-2 | The system shall support secure communication channels for task routing and monitoring between the server and participating nodes. | PARTIAL | Local DTLS plus token binding tested; public TLS/NAT/Android verification incomplete. |
+| CI-3 | The system shall support OTP or email-based communication for account verification during registration. | MET | Actual Nodemailer→local SMTP sink→OTP verification tested. External inbox delivery UNVERIFIED. |
+| CI-4 | The system shall support notification delivery for order updates, transaction updates, and administrative alerts. | MET | In-app task/payment/order/warning notifications tested; push/SMS not claimed or required here. |
+| CI-5 | The system shall tolerate temporary communication interruptions by attempting recovery where possible and logging failures otherwise. | PARTIAL | Local disconnect/WebRTC failure/Redis/ML fallback/restart tests pass; actual mobile handover recovery BLOCKED. |
 
-## 2.7.3 Performance
-| ID | Requirement | Status | Notes |
-|---|---|---|---|
-| PER-1 | 95% of user login requests shall be processed within 3 seconds under normal network conditions. | UNVERIFIED | Architecture appears capable (simple bcrypt compare + JWT generation). No benchmark test has been run. |
-| PER-2 | 95% of dashboard pages shall load within 4 seconds over a stable 20 Mbps internet connection. | UNVERIFIED | React static build served via Nginx; API data fetched on mount. No benchmark test has been run. |
-| PER-3 | 95% of task submission requests shall be acknowledged by the server within 3 seconds after the client submits the task. | UNVERIFIED | Task creation is synchronous Express handler. No benchmark test has been run. |
-| PER-4 | The system shall refresh task execution status for active tasks at least once every 10 seconds. | PARTIAL | Web frontend polls task status; node agents send heartbeat every 10s. Socket.IO events push task_completed. However, active task status is polled by frontend, not pushed in real-time to web dashboard. |
-| PER-5 | The system shall display current session statistics for an active node within 5 seconds of receiving updated monitoring data. | PARTIAL | Node session endpoint returns latest data. However, latency display has simulated random noise (Math.random() * 9 - 4). Admin dashboard polls rather than receiving push updates. |
-| PER-6 | The system shall support concurrent operation of multiple nodes and clients without causing incorrect task assignment or transaction settlement conflicts. | UNVERIFIED | Task allocation uses atomic-style allocation. Wallet uses sequential save() without MongoDB transactions (race condition possible). No concurrent load test has been run. |
+## Performance and deployment evidence boundary
 
-## 2.7.4 Security
-| ID | Requirement | Status | Notes |
-|---|---|---|---|
-| SEC-1 | The system shall ensure that only authenticated and authorized users can access protected platform functions. | MET | JWT-based authentication middleware (protect) on all non-auth routes. Role-based access control via allowRoles() middleware. |
-| SEC-2 | The system shall protect communication between the server and participating nodes against unauthorized interception or manipulation. | PARTIAL | Socket.IO connections authenticated via JWT or API key. TLS available via reverse proxy. However, the SRS-required WebRTC secure channel is not implemented. No end-to-end encryption beyond transport-level TLS. |
-| SEC-3 | The system shall associate participation sessions with verified devices to reduce misuse from unknown or cloned devices. | PARTIAL | NodeDevice model has deviceFingerprint field, and each node is linked to userId. However, device fingerprint is not cryptographically verified; stored but not enforced for authentication. |
-| SEC-4 | The system shall record suspicious activities such as abnormal traffic, repeated failures, or unusual payment behavior for administrative review. | NOT_MET | AnomalyAlert model exists in the models directory but no anomaly detection rules are implemented. No suspicious activity is automatically detected or recorded. |
-| SEC-5 | The system shall restrict task execution to authorized and lawful requests only. | MET | Task target URLs are validated; loopback addresses blocked in production; only authenticated platform_client/both users can create tasks; node agents only execute tasks dispatched by the backend. |
-| SEC-6 | Sensitive wallet, transaction, and account records shall not be exposed to unauthorized users. | MET | Wallet access restricted to owning user. Task results filtered by clientId. Admin-only routes guarded. Passwords excluded via .select('-password'). OTP only returned in dev mode. |
-| SEC-7 | Administrative actions affecting user accounts, transactions, or system settings shall be traceable through system logs. | MET | AdminLog model records admin actions: user block/unblock, task creation, settlement, marketplace CRUD. All admin endpoints create AdminLog entries. |
+[Performance results](PERFORMANCE_RESULTS.md) contains actual p50/p95 values, sample sizes and reproducible method. Login and task acknowledgement satisfy their numeric thresholds on localhost; this does not establish public-network percentile compliance. No page-load figure is inferred from an API response. No ≥95% task terminal-state statistic is inferred from one successful task.
 
-## 2.8.1 User Interface Requirements
-| ID | Requirement | Status | Notes |
-|---|---|---|---|
-| UI-1 | The mobile application shall present dashboard-style views for participation, earnings, wallet, and profile settings. | PARTIAL | Flutter app has node participation dashboard, wallet, and profile. Missing: Platform Client mobile views. Earnings view exists. |
-| UI-2 | The admin interface shall present KPI summaries, charts, node health indicators, suspicious activity panels, and user management controls. | PARTIAL | Admin dashboard has KPI summaries (user counts, task counts, credits issued). User/node management exists. Missing: charts, suspicious activity panels (no AnomalyAlert data), node health visualization. |
-| UI-3 | The marketplace interface shall display product cards including product name, description, and required credits. | MET | Marketplace products displayed with name, description, creditCost on both React and Flutter. |
-| UI-4 | Consistent button labels, navigation patterns, and status indicators shall be used across all system screens. | MET | React frontend uses consistent sidebar navigation and button styling. Flutter uses Material Design consistently. |
-| UI-5 | The user interface shall be designed to accommodate future localization and region-based content display where needed. | PARTIAL | No i18n/l10n framework integrated. All UI strings are hardcoded in English. |
+The local replica set is a real single-member primary with snapshot/majority transactions, but is loopback-only and has no authentication, failover or multi-host HA evidence. Compose now requires authenticated Mongo/keyfile and health ordering; Docker is absent, so container builds, fresh-volume initialization, secrets and readiness are BLOCKED. Deployment TLS, backup restore, SMTP inbox delivery, live Python ML service and fleet-scale measurements are UNVERIFIED.
 
-## 2.8.2 Software Interfaces
-| ID | Requirement | Status | Notes |
-|---|---|---|---|
-| SI-1 | The system shall interface with a MongoDB database to store user records, task data, node activity logs, transactions, and marketplace information. | MET | MongoDB via Mongoose with 15 models covering all stated data types. |
-| SI-2 | The system shall use Node.js and Express.js backend services to provide APIs for authentication, task management, wallet operations, and admin functions. | MET | Express.js REST API with 8 route files, 8 controllers. |
-| SI-3 | The system shall interface with WebRTC components for secure peer communication between backend services and participating nodes. | NOT_MET | Zero WebRTC implementation. Socket.IO used instead. |
-| SI-4 | The system shall interface with Android VpnService API for controlled traffic forwarding through participating Android devices. | NOT_MET | Flutter app uses http package for direct HTTP requests. No VpnService integration. |
-| SI-5 | The system shall support integration with payment verification workflows for credit top-ups and withdrawals. | PARTIAL | TopUpRequest and WithdrawalRequest models exist. Admin demo-credit endpoint exists. Full payment proof upload and admin verification workflow not yet fully implemented. |
-| SI-6 | The system shall support notification services for alerts related to orders, wallet updates, and task status changes. | PARTIAL | Notification model exists but notification delivery service not implemented. No push/email notifications sent. |
-
-## 2.8.4 Communications Interfaces
-| ID | Requirement | Status | Notes |
-|---|---|---|---|
-| CI-1 | The system shall use internet-based communication between mobile devices, clients, backend servers, and the admin dashboard. | MET | All communication is internet-based: REST API via HTTP/HTTPS, Socket.IO via WebSocket. |
-| CI-2 | The system shall support secure communication channels for task routing and monitoring between the server and participating nodes. | PARTIAL | Socket.IO provides authenticated channel. TLS available via reverse proxy. However, the required WebRTC secure routing channel is not implemented. |
-| CI-3 | The system shall support OTP or email-based communication for account verification during registration. | NOT_MET | OTP generated and stored but delivered ONLY in API response body (devOtp). No email/SMS service implemented. |
-| CI-4 | The system shall support notification delivery for order updates, transaction updates, and administrative alerts. | NOT_MET | No notification delivery service. Notification model exists but no notification creation or delivery logic. |
-| CI-5 | The system shall tolerate temporary communication interruptions by attempting recovery where possible and logging failures otherwise. | PARTIAL | Socket.IO auto-reconnect; BullMQ retry with exponential backoff; task timeout recovery (15s). However, no WebRTC session recovery exists. |
-
-## 2.2 Operating Environment
-| ID | Requirement | Status | Notes |
-|---|---|---|---|
-| OE-1 | The NetShare mobile application shall operate on Android devices supporting Android API Level 21 or above. | MET | Flutter targets minSdkVersion 21. |
-| OE-2 | The NetShare web dashboard shall operate through modern web browsers on desktop or laptop systems for administrative use. | MET | React 18 + Vite standard build; works in Chrome, Firefox, Edge. |
-| OE-3 | The backend server environment shall support Node.js and Express.js for asynchronous API handling and service management. | MET | Node.js with Express.js (ESM modules). |
-| OE-4 | The database environment shall use MongoDB to store user records, task records, wallet activity, node monitoring logs, and marketplace data. | MET | MongoDB via Mongoose; docker-compose uses mongo:7.0. |
-| OE-5 | The secure communication environment shall support WebRTC channels and Android VpnService-based traffic forwarding for controlled request routing through residential nodes. | NOT_MET | Neither WebRTC nor VpnService implemented. |
-| OE-6 | The system shall support operation for geographically distributed users and participating nodes in different regions, subject to lawful internet access and local network conditions. | MET | Region field on devices; region-based task allocation; multiple nodes in different regions supported. |
-
-## 2.3 Design and Implementation Constraints
-| ID | Constraint | Status | Notes |
-|---|---|---|---|
-| CON-1 | Backend in Node.js and Express.js | MET | |
-| CON-2 | Mobile in Flutter, primarily Android | MET | |
-| CON-3 | MongoDB as primary database | MET | |
-| CON-4 | Secure communication limited to WebRTC and Android VpnService API | NOT_MET | Socket.IO used instead |
-| CON-5 | Only lawful/permitted tasks with user consent | MET | URL validation, loopback blocking |
-| CON-6 | No bypass of regional firewalls or unrestricted access | MET | only permitted requests |
-| CON-7 | Initial payment verification may be manual | MET | manual admin verification design |
-| CON-8 | Simple rule-based logic with basic ML support | PARTIAL | JS scoring works; ML deployed but not integrated |
-| CON-9 | Active internet connectivity required | MET | inherent |
-| CON-10 | Subject to ISP policies | MET | documented limitation |
-
-## Compliance Summary
-
-| Status | Count |
-|---|---|
-| **MET** | 27 |
-| **PARTIAL** | 17 |
-| **NOT_MET** | 7 |
-| **UNVERIFIED** | 4 |
-| **TOTAL** | **55** |
+Real Android E2E, TUN egress, background/screen lock, VPN revoke and Wi-Fi/mobile switch are BLOCKED because no physical device or AVD exists. STUN/TURN/NAT-separated communication is UNVERIFIED. None has been substituted with a mock PASS.

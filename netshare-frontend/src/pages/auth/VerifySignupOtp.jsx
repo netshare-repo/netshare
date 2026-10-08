@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Network } from "lucide-react";
 import axiosInstance from "../../api/axiosInstance";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/authState";
 import "./Register.css"; // Reuse styling
 
 function VerifySignupOtp() {
@@ -13,7 +13,7 @@ function VerifySignupOtp() {
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(() => location.state?.devOtp ? `[DEV ONLY] Your OTP is: ${location.state.devOtp}` : '');
 
   const email = location.state?.email || "";
   const devOtp = location.state?.devOtp;
@@ -21,9 +21,6 @@ function VerifySignupOtp() {
   useEffect(() => {
     if (!email) {
       navigate("/register");
-    }
-    if (devOtp) {
-      setMessage(`[DEV ONLY] Your OTP is: ${devOtp}`);
     }
   }, [email, devOtp, navigate]);
 

@@ -11,7 +11,7 @@ function VerifyResetOtp() {
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [message] = useState(() => location.state?.devOtp ? `[DEV ONLY] Your Reset OTP is: ${location.state.devOtp}` : '');
 
   const email = location.state?.email || "";
   const devOtp = location.state?.devOtp;
@@ -19,9 +19,6 @@ function VerifyResetOtp() {
   useEffect(() => {
     if (!email) {
       navigate("/forgot-password");
-    }
-    if (devOtp) {
-      setMessage(`[DEV ONLY] Your Reset OTP is: ${devOtp}`);
     }
   }, [email, devOtp, navigate]);
 
@@ -31,7 +28,7 @@ function VerifyResetOtp() {
     setLoading(true);
 
     try {
-      const res = await axiosInstance.post("/auth/verify-reset-otp", { email, otp });
+      await axiosInstance.post("/auth/verify-reset-otp", { email, otp });
       
       // Navigate to reset password page, passing email and OTP (to authorize reset)
       navigate("/reset-password", {

@@ -24,6 +24,9 @@ import ManageUsers from "../pages/admin/ManageUsers";
 import ManageNodes from "../pages/admin/ManageNodes";
 import ManageTasks from "../pages/admin/ManageTasks";
 import Transactions from "../pages/admin/Transactions";
+import Payments from "../pages/admin/Payments";
+import Operations from '../pages/admin/Operations';
+import Disputes from '../pages/common/Disputes';
 import MarketplaceProducts from "../pages/admin/MarketplaceProducts";
 import MarketplaceOrders from "../pages/admin/MarketplaceOrders";
 
@@ -37,6 +40,8 @@ import LandingPage from "../pages/LandingPage";
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/disputes" element={<ProtectedRoute><Disputes /></ProtectedRoute>} />
+      <Route path="/admin/operations" element={<ProtectedRoute><RoleRoute allowedRoles={["admin"]}><Operations /></RoleRoute></ProtectedRoute>} />
       <Route path="/" element={<LandingPage />} />
 
       {/* Auth Routes */}
@@ -221,6 +226,17 @@ function AppRoutes() {
           <ProtectedRoute>
             <RoleRoute allowedRoles={["admin"]}>
               <Transactions />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/payments"
+        element={
+          <ProtectedRoute>
+            <RoleRoute allowedRoles={["admin"]}>
+              <Payments />
             </RoleRoute>
           </ProtectedRoute>
         }

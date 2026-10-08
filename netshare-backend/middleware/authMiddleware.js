@@ -33,6 +33,7 @@ export const protect = async (req, res, next) => {
       });
     }
 
+    if (!req.user.isVerified) return res.status(403).json({ message: 'Account verification required' });
     next();
   } catch (error) {
     return res.status(401).json({

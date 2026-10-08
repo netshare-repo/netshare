@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PackageCheck, RefreshCw, Search } from "lucide-react";
 import AdminLayout from "../../layouts/AdminLayout";
 import {
@@ -18,7 +18,7 @@ function MarketplaceOrders() {
     search: ""
   });
 
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     try {
       setLoading(true);
       const queryParams = { ...filters };
@@ -32,7 +32,7 @@ function MarketplaceOrders() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
 
   const handleFilterChange = (e) => {
     setFilters({ ...filters, [e.target.name]: e.target.value });
@@ -67,8 +67,8 @@ function MarketplaceOrders() {
   };
 
   useEffect(() => {
-    loadOrders();
-  }, [filters.status]);
+    void Promise.resolve().then(loadOrders);
+  }, [loadOrders]);
 
   return (
     <AdminLayout>

@@ -16,6 +16,7 @@ import {
   getNodeBandwidthHistory,
   pauseParticipation,
   resumeParticipation,
+  getAvailableRegions,
 } from "../controllers/nodeController.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { allowRoles } from "../middleware/roleMiddleware.js";
@@ -23,6 +24,13 @@ import { allowRoles } from "../middleware/roleMiddleware.js";
 const router = express.Router();
 
 const allowedNodeRoles = ["node_participant", "both", "admin"];
+
+router.get(
+  "/availability",
+  protect,
+  allowRoles("platform_client", "both", "admin"),
+  getAvailableRegions
+);
 
 // Node Dashboard
 router.get(

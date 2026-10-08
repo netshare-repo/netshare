@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Users,
@@ -23,7 +23,7 @@ import {
   getAdminTasks,
   getAdminTransactions,
 } from "../../api/adminApi";
-import { useSocket } from "../../context/SocketContext";
+import { useSocket } from "../../context/socketState";
 import "./AdminDashboard.css";
 
 function AdminDashboard() {
@@ -55,7 +55,7 @@ function AdminDashboard() {
     return [];
   };
 
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     try {
       setLoading(true);
       setMessage("");
@@ -64,7 +64,7 @@ function AdminDashboard() {
 
       try {
         dashboardData = await getAdminDashboard();
-      } catch (_) {
+      } catch {
         dashboardData = null;
       }
 
@@ -152,11 +152,11 @@ function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadDashboard();
-  }, []);
+    void Promise.resolve().then(loadDashboard);
+  }, [loadDashboard]);
 
   // Compute live regional distribution
   const regionalDistribution = nodesList.reduce((acc, node) => {

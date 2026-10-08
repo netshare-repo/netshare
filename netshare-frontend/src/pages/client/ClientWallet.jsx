@@ -13,6 +13,11 @@ import "./ClientWallet.css";
 function ClientWallet() {
   const [wallet, setWallet] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  const [topUps, setTopUps] = useState([]);
+  const [topUpForm, setTopUpForm] = useState({ amount: "", paymentMethod: "bank_transfer", referenceNumber: "" });
+  const [proof, setProof] = useState(null);
+  const [paymentMessage, setPaymentMessage] = useState("");
+  const [paymentBusy, setPaymentBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchWalletData = async () => {
@@ -24,6 +29,8 @@ function ClientWallet() {
 
       const txRes = await axiosInstance.get("/wallet/transactions");
       setTransactions(txRes.data.transactions || []);
+      const topUpRes = await axiosInstance.get("/wallet/top-ups");
+      setTopUps(topUpRes.data.requests || []);
     } catch (error) {
       console.log("Wallet error:", error.response?.data || error.message);
     } finally {
@@ -32,8 +39,39 @@ function ClientWallet() {
   };
 
   useEffect(() => {
-    fetchWalletData();
+    const timer = setTimeout(fetchWalletData, 0);
+    return () => clearTimeout(timer);
   }, []);
+
+  const submitTopUp = async (event) => {
+    event.preventDefault();
+    setPaymentMessage("");
+    if (!proof || proof.size > 2 * 1024 * 1024 || !["image/png", "image/jpeg", "application/pdf"].includes(proof.type)) {
+      setPaymentMessage("Choose a PNG, JPEG, or PDF proof no larger than 2 MB.");
+      return;
+    }
+    setPaymentBusy(true);
+    try {
+      const proofBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",")[1]);
+        reader.onerror = () => reject(new Error("Could not read payment proof"));
+        reader.readAsDataURL(proof);
+      });
+      await axiosInstance.post("/wallet/top-ups", {
+        amount: Number(topUpForm.amount), paymentMethod: topUpForm.paymentMethod,
+        referenceNumber: topUpForm.referenceNumber, proofMime: proof.type, proofBase64,
+      });
+      setPaymentMessage("Top-up submitted for manual verification. Your wallet is not credited yet.");
+      setTopUpForm({ amount: "", paymentMethod: "bank_transfer", referenceNumber: "" });
+      setProof(null);
+      await fetchWalletData();
+    } catch (error) {
+      setPaymentMessage(error.response?.data?.message || error.message);
+    } finally {
+      setPaymentBusy(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -52,7 +90,7 @@ function ClientWallet() {
             <h1>Client Wallet</h1>
             <p>
               Track your available credits, task spending, and transaction
-              history for Phase-1 testing tasks.
+              history and manually verified payments.
             </p>
           </div>
 
@@ -167,7 +205,7 @@ function ClientWallet() {
           <div className="wallet-info-panel">
             <div className="wallet-info-card">
               <CreditCard size={30} />
-              <h3>Phase-1 Credit Rules</h3>
+              <h3>Credit Rules</h3>
 
               <div className="rule-box">
                 <span>01</span>
@@ -176,7 +214,7 @@ function ClientWallet() {
 
               <div className="rule-box">
                 <span>02</span>
-                <p>Task cost = execution limit × 10 credits.</p>
+                <p>Task prices are quoted before submission based on region, demand, availability, and quality.</p>
               </div>
 
               <div className="rule-box">
@@ -191,12 +229,18 @@ function ClientWallet() {
             </div>
 
             <div className="wallet-note-card">
-              <h3>Payment Status</h3>
-              <p>
-                Real top-up, withdrawal, and payment gateway are not included in
-                Phase-1. This wallet is used for backend-controlled demo credit
-                settlement.
-              </p>
+              <h3>Request a Top-Up</h3>
+              <p>Pay using a supported local channel, then submit the exact reference and proof. An admin verifies payment before credits are added.</p>
+              <form onSubmit={submitTopUp} className="payment-form">
+                <label>Credits requested<input type="number" min="1" max="1000000" step="1" required value={topUpForm.amount} onChange={(event) => setTopUpForm({ ...topUpForm, amount: event.target.value })} /></label>
+                <label>Payment method<select value={topUpForm.paymentMethod} onChange={(event) => setTopUpForm({ ...topUpForm, paymentMethod: event.target.value })}><option value="bank_transfer">Bank transfer</option><option value="easypaisa">Easypaisa</option><option value="jazzcash">JazzCash</option></select></label>
+                <label>Payment reference<input required minLength="6" maxLength="64" value={topUpForm.referenceNumber} onChange={(event) => setTopUpForm({ ...topUpForm, referenceNumber: event.target.value })} /></label>
+                <label>Payment proof<input type="file" accept="image/png,image/jpeg,application/pdf" required onChange={(event) => setProof(event.target.files?.[0] || null)} /></label>
+                <button type="submit" disabled={paymentBusy}>{paymentBusy ? "Submitting..." : "Submit for verification"}</button>
+              </form>
+              {paymentMessage && <p role="status">{paymentMessage}</p>}
+              <h3>Top-Up History</h3>
+              {topUps.length === 0 ? <p>No top-up requests yet.</p> : <ul className="payment-history">{topUps.map((item) => <li key={item._id}>{item.amount} credits · {item.paymentMethod} · {item.referenceNumber} · {item.status}{item.adminNote ? ` · ${item.adminNote}` : ""}</li>)}</ul>}
             </div>
           </div>
         </div>

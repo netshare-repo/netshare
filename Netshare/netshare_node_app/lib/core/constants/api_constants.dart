@@ -3,7 +3,7 @@ class ApiConstants {
   // Use http://<laptop_ip>:8000/api for real device
   // Use http://localhost:8000/api for Chrome/Web
 
-  static const String baseUrl = "http://10.113.75.193:8000/api";
+  static const String baseUrl = String.fromEnvironment('NETSHARE_API_URL', defaultValue: 'http://10.113.75.193:8000/api');
 
   // Auth
   static const String register = "/auth/register";

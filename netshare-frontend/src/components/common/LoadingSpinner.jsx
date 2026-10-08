@@ -1,4 +1,3 @@
-import React from "react";
 import "./LoadingSpinner.css";
 
 function LoadingSpinner({ text = "Loading...", size = "md" }) {

@@ -13,7 +13,7 @@ function MyOrders() {
       setLoading(true);
       const data = await getMyMarketplaceOrders();
       setOrders(data.orders || []);
-    } catch (error) {
+    } catch {
       setOrders([]);
     } finally {
       setLoading(false);
@@ -21,7 +21,7 @@ function MyOrders() {
   };
 
   useEffect(() => {
-    loadOrders();
+    void Promise.resolve().then(loadOrders);
   }, []);
 
   return (
