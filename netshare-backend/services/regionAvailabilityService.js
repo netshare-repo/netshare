@@ -1,5 +1,6 @@
 import NodeDevice from "../models/NodeDevice.js";
 import { isNodeConnected } from "./socketService.js";
+import { refreshDailyBudgets } from './trafficPolicyService.js';
 
 export const DEFAULT_CLIENT_REGIONS = Object.freeze([
   "Pakistan",
@@ -25,6 +26,7 @@ const emptyRegion = (region) => ({
  * execution slot and remaining bandwidth, and have a live control connection.
  */
 export const getRegionAvailability = async (requestedRegions = []) => {
+  await refreshDailyBudgets();
   const candidates = await NodeDevice.find({
     status: "active",
     $expr: { $lt: ["$currentActiveTasks", "$maxConcurrentTasks"] },

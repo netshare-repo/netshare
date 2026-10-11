@@ -1,3 +1,81 @@
+# Phase 9 — Release Blocker Closure
+
+Validation date: 2026-10-09 (Asia/Karachi). Decision: **NOT READY**. This Phase 9 section is authoritative; the original Phase 8 evidence follows as an explicitly historical snapshot. SRS and Chapter 3 are unchanged.
+
+## Current validation
+
+| Gate | Observed result / scope |
+|---|---|
+| Backend full suite | **221/221 PASS**, 12 files; baseline 205 plus 16 new Phase 9 cases. Real MongoDB single-member phase9rs on loopback port 27020. |
+| Flutter full suite | **62/62 PASS**; baseline 50 plus six screen/role/wallet cases, four STUN protocol/calculation cases and two VPN ownership/lifecycle cases. |
+| Flutter analysis | **PASS**, no issues found. |
+| Native Kotlin | **5/5 PASS**, TrafficPolicyTest: combined quota/persistence, conservative restart, directional pacing, expiry/persistence failure and concurrent consumers. |
+| Frontend | **Production build and full ESLint PASS**. No new browser E2E claim. |
+| Android | **arm64 debug APK PASS**. aapt reports minSdk 24, targetSdk 36. Not release signing or device execution. |
+| API 21 / OE-1 | **BLOCKED**, actual direct manifest merge failed. Details below. |
+| Official FRs | **73 DONE / 11 PARTIAL / 0 NOT_DONE of 84 (86.90%)**. Every former partial row reviewed; code and environment evidence separated below. |
+| Android / external environments | No device/AVD. Android E2E/lifecycle/network gates BLOCKED; live STUN/TURN/NAT and SMS UNVERIFIED. Docker/live deployment not claimed. |
+
+Full-suite command: from netshare-backend set MONGO_URI to mongodb://127.0.0.1:27020/netshare_phase9?replicaSet=phase9rs, NODE_ENV=test and a non-production JWT fixture secret, then run `npm.cmd test -- --reporter=dot`. The isolated real Mongo data directory is repository-local `.phase9-mongo` (gitignored); it does not use operator databases. It is a loopback-only, unauthenticated, single-member test replica, not production HA. After validation, its exact owned process was stopped; ignored test fixtures were retained.
+
+From Netshare/netshare_node_app: `flutter test`, `flutter analyze`, `flutter build apk --debug --target-platform android-arm64`. From its android directory: `gradlew.bat :app:testDebugUnitTest --console=plain`. JUnit XML is under build/app/test-results/testDebugUnitTest. From netshare-frontend: `npm.cmd run build` and `npm.cmd run lint`.
+
+## Exact API 21 blocker
+
+The installed Flutter **3.41.9** toolchain defines `minSdkVersion = 24` in FlutterExtension.kt. Dart is **3.11.5** and the application requires ^3.11.5. Direct dependency shared_preferences ^2.5.5 resolves **shared_preferences_android 2.4.23**, whose Android library minimum is also **24**. flutter_webrtc 1.6.2+hotfix.3 declares 21 itself; it is not the first manifest blocker.
+
+An initial `flutter build` automatically migrated the attempted app minimum of 21 back to the supported Flutter minimum; that successful build was **not** API-21 evidence. A second probe used direct `:app:processDebugMainManifest` with minimum 21 and failed with:
+
+> uses-sdk:minSdkVersion 21 cannot be smaller than version 24 declared in library [:shared_preferences_android]
+
+The application was restored to `flutter.minSdkVersion`; the actual final APK minimum is 24. No `tools:overrideLibrary`, fake manifest PASS or SRS change was used. Restoring 21 requires a compatible older Flutter/Dart/plugin family or maintaining a supported port/fork, followed by full regression and API-21 execution. Merely lowering one Gradle integer cannot restore support. This documents a concrete blocker in the current dependency family, not a claim that every possible toolchain is incapable of API 21. Flutter's upstream removal of older Android support is recorded in [issue 170807](https://github.com/flutter/flutter/issues/170807).
+
+## Review of all 20 previously PARTIAL FRs
+
+| FRs | Code-side result | Acceptance disposition |
+|---|---|---|
+| FR1.1, FR1.4 | Phone-only canonical E.164 identity, partial unique indexes, email/SMS choice in web/Flutter, signup/resend/reset/verify/login and bounded provider adapter. | Remain PARTIAL: fixtures prove protocol/error behavior, not live provider/handset delivery. |
+| FR2.3 | Owner PNG/JPEG upload, canonical base64/signature/2 MB validation, storage, web/Flutter picker/preview and redaction tests. | DONE. |
+| FR2.5 | Confirmed current-password role update, transaction, audit, active-work exclusion, socket disconnect and web/Flutter workflow. | DONE. |
+| FR3.1, FR3.5, FR3.6, FR4.5 | Status/native VPN display, start failure cleanup, single-owner VPN lease, draining and owned native shutdown remain implemented; duplicate close and competing route tests added. | Remain PARTIAL: actual device start/stop/correlation/background/revoke untested. |
+| FR3.2 | UTC rollover only when idle; legacy migration retains usage; immutable authorized policy; fail-closed persisted native TUN byte allowance. | Remains PARTIAL: device quota/kill/restart/rollover evidence required. |
+| FR3.3 | Validated upload/download caps and native paced forwarding, shared policy lock, denied active-policy edits. | Remains PARTIAL: actual throughput under device load required. |
+| FR3.7, FR4.3 | Native counter-delta upload/download speed, five-second live activity, session/region/bandwidth/health and honest errors/unmeasured display; web current metrics. | Remain PARTIAL: physical counter/traffic correlation required. |
+| FR4.2 | Four bounded authenticated-offer STUN binding samples with cookie/transaction/source validation, response-timeout loss, RTT and adjacent RTT jitter; null when absent/stale. | Remains PARTIAL: real Android/STUN evidence missing; no TURN/NAT claim. |
+| FR5.4, FR5.5, FR5.6 | Flutter participant wallet withdrawal/history, channels/account inputs, validation, actual-balance eligibility and stable retry key against atomic existing backend. | DONE. |
+| FR12.3, FR12.4 | Primary admin bandwidth aggregates and fresh-node latency/reliability/capacity/load snapshot with timestamp/null semantics. | DONE. |
+| FR13.3, FR13.4 | Admin individual detail view and audited idempotent read-only restriction distinct from blocking; owner/status checks serialize with task creation/allocation. | DONE. |
+
+The 64 previously DONE FRs retain their explicit implementation evidence and pass the full regression suite; they were not rewritten. The refreshed [84-row register](REQUIREMENTS_TRACEABILITY.md) has nine promotions, eleven retained partial rows, no missing rows and no NOT_DONE rows.
+
+## Security, lifecycle and measurement limits
+
+- Own/admin serializers remove passwords and signup/reset OTP material; node API keys are excluded from admin detail responses.
+- Role changes require confirmation/current password and cannot self-promote to admin. Restriction denies state-changing routes and socket admission, disconnects current sockets and prevents further allocation; read access remains distinct from a block.
+- Withdrawal retry keys are user-scoped and payload-bound; repeated/concurrent submissions reserve once. Changed payload with the same key returns conflict.
+- Native TrafficPolicy counts **forwarded IP bytes** in both directions, persists a conservative 64 KiB reservation before forwarding and fails closed on exhausted/expired policy or storage failure. A restart may under-use the reservation; it must not reopen it. The scope excludes signaling and kernel/network-interface overhead and is not a claim of wire-perfect billing.
+- Policy expires at the UTC day boundary; old assignments must finish/fail before the server resets an idle node. A single-process Android VPN lease rejects competing routes instead of replacing another task's tunnel. Device revoke/kill/handover remains unverified.
+- Native byte pacing has deterministic unit evidence, not measured handset throughput. Actual speeds come from monotonic counter deltas; missing measurements remain null.
+- STUN loss means unanswered binding probes within the explicit 400 ms sample deadline, not loss inferred from failed HTTP tasks. Results expire after 60 seconds. Four samples are diagnostics, not a statistically proven network prediction.
+- The legacy desktop Socket.IO daemon now exits without connecting/executing. Mobile manual Start/Complete/Fail controls and synthetic task-result helper were removed. Secure desktop modules remain explicitly for integration fixtures. Missing CPU measurements no longer fabricate 1.5%; HTTP failures are no longer labeled packet loss.
+- Tests use explicit provider/protocol fixtures where stated. No production mock, fallback Socket.IO task execution, real SMS delivery or Android E2E PASS is inferred from them.
+
+## Deployment migration and unchanged external gates
+
+The SMS adapter uses the documented [Twilio Messages API](https://www.twilio.com/docs/messaging/api/message-resource), a fixed HTTPS endpoint, no redirects and an eight-second timeout. Optional TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER must be provided securely. Missing/rejected/unavailable provider fails with 503; no console/SMS demo fallback is used. Provider acceptance is not handset delivery. If initial delivery fails, the unverified account can retry via the resend endpoint.
+
+Startup creates replacement partial unique email/phone indexes before dropping the old non-sparse email_1 index. Existing conflicting phone data must be reviewed before rollout; migration never silently merges identities. Only the selected verified SMS channel is a phone authentication identity: an unverified contact number on an email account cannot reset its password.
+
+The migration scopes phone uniqueness to SMS-authentication identities, so duplicate legacy contact numbers on email accounts do not crash startup and are not rewritten. It also replaces the legacy sparse financial idempotency index only after checking for duplicate string keys. Genuine SMS identity, invalid SMS account or financial-key conflicts stop startup with sanitized diagnostics rather than choosing an owner or deleting records. Existing-database restart, clean-database creation and 221 backend regressions pass.
+
+Remaining external gates are actual Android device/AVD E2E, background/screen lock, VPN revoke, Wi-Fi/mobile recovery, native quota/speed evidence, live STUN/TURN/NAT-separated peers, provider SMS/SMTP delivery, live Python dependencies/service, Docker runtime and production TLS/authenticated Mongo HA/restore/fleet/browser performance. No new benchmark, security-audit or deployment PASS is claimed by this phase. Phase 8's 23 strict NFR results (12 MET / 5 PARTIAL / 6 UNVERIFIED) remain historical; API compatibility remains unmet.
+
+**Release candidate NOT READY. STOP after Phase 9.**
+
+---
+
+## Historical Phase 8 report (superseded by Phase 9 above where changed)
+
 # Phase 8 — Release Candidate Validation
 
 Validation date: 2026-10-08 (Asia/Karachi). Decision: **NOT READY**.

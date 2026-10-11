@@ -15,6 +15,8 @@ const testingTaskSchema = new mongoose.Schema(
       trim: true,
     },
 
+    method: { type: String, enum: ["GET"], default: "GET" },
+
     serviceType: {
       type: String,
       enum: [

@@ -32,9 +32,13 @@ import CreditTransaction from './models/CreditTransaction.js';
 import TopUpRequest from './models/TopUpRequest.js';
 import WithdrawalRequest from './models/WithdrawalRequest.js';
 import { startTaskRecovery } from './services/taskRecoveryService.js';
+import { ensureIdentityIndexes } from './services/identityService.js';
+import { ensureFinancialIndexes } from './services/indexMigrationService.js';
 
 // Connect to MongoDB
 await connectDB();
+await ensureIdentityIndexes();
+await ensureFinancialIndexes();
 // Do not serve writes before the deduplication/ownership indexes are ready.
 await Promise.all([AnomalyAlert.init(), Notification.init(), Dispute.init(), TaskResult.init(),
   CreditTransaction.init(), TopUpRequest.init(), WithdrawalRequest.init()]);

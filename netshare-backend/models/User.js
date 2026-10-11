@@ -10,8 +10,6 @@ const userSchema = new mongoose.Schema(
 
     email: {
       type: String,
-      required: [true, "Email is required"],
-      unique: true,
       lowercase: true,
       trim: true,
     },
@@ -20,6 +18,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    verificationMethod: { type: String, enum: ['email', 'sms'], default: 'email' },
 
     password: {
       type: String,
@@ -39,10 +38,11 @@ const userSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["active", "blocked"],
+      enum: ["active", "blocked", "restricted"],
       default: "active",
     },
 
+    authorizationVersion: { type: Number, default: 0 },
     isVerified: {
       type: Boolean,
       default: false,
@@ -83,7 +83,15 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
   },
-  { timestamps: true }
+  // Identity indexes are created explicitly by ensureIdentityIndexes(). This
+  // prevents Mongoose auto-indexing from racing the legacy-data preflight at
+  // process startup.
+  { timestamps: true, autoIndex: false }
 );
 
+userSchema.index({ email: 1 }, { name: 'identity_email_unique', unique: true, partialFilterExpression: { email: { $type: 'string', $gt: '' } } });
+// A phone is an authentication identity only for accounts which selected SMS.
+// Email accounts may retain a shared legacy contact number without preventing
+// startup; findIdentity() also deliberately ignores those contact numbers.
+userSchema.index({ phone: 1 }, { name: 'identity_phone_unique', unique: true, partialFilterExpression: { verificationMethod: 'sms', phone: { $type: 'string', $gt: '' } } });
 export default mongoose.model("User", userSchema);

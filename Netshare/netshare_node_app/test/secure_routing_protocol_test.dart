@@ -24,7 +24,7 @@ void main() {
     );
   });
 
-  test('authorized task requires bound session, host, port and GET/HEAD', () {
+  test('authorized task requires bound session, host, port and GET', () {
     final protocol = SecureRoutingProtocol();
     final valid = protocol.build(sessionId, 'task_request', {
       'taskId': 'task-1',
@@ -32,13 +32,13 @@ void main() {
       'targetUrl': 'https://example.com/status',
       'authorizedHost': 'example.com',
       'authorizedPort': 443,
-      'authorizedMethod': 'HEAD',
+      'authorizedMethod': 'GET',
       'timeoutMs': 5000,
     });
 
     final task = AuthorizedTaskRequest.fromMessage(valid);
     expect(task.taskId, 'task-1');
-    expect(task.authorizedMethod, 'HEAD');
+    expect(task.authorizedMethod, 'GET');
 
     final invalidMethod = protocol.build(sessionId, 'task_request', {
       ...valid.payload,
@@ -48,6 +48,11 @@ void main() {
       () => AuthorizedTaskRequest.fromMessage(invalidMethod),
       throwsFormatException,
     );
+    final headMethod = protocol.build(sessionId, 'task_request', {
+      ...valid.payload,
+      'authorizedMethod': 'HEAD',
+    });
+    expect(() => AuthorizedTaskRequest.fromMessage(headMethod), throwsFormatException);
 
     final wrongBinding = protocol.build(sessionId, 'task_request', {
       ...valid.payload,

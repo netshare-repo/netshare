@@ -28,6 +28,7 @@ Thumbs.db
 # Docker volumes
 secrets/
 mongo_data/
+.phase9-mongo/
 redis_data/
 
 # Coverage

@@ -30,18 +30,18 @@ export class TaskExecutor {
     const latencyMs = successful.length
       ? Math.round(successful.reduce((sum, result) => sum + result.latencyMs, 0) / successful.length)
       : Math.max(...results.map((result) => result.latencyMs), 0);
-    const packetLoss = Math.round(((samples - successful.length) / samples) * 100);
+    const httpFailureRate = Math.round(((samples - successful.length) / samples) * 100);
 
     return {
       success: successful.length > 0,
       statusCode: successful.at(-1)?.statusCode || results.at(-1)?.statusCode || 502,
       latencyMs,
-      packetLoss,
+      packetLoss: null, // HTTP failures do not measure network packet loss.
       bandwidthUsedMB,
       downloadBandwidthMB: results.reduce((sum, result) => sum + Number(result.downloadBandwidthMB || 0), 0),
       uploadBandwidthMB: results.reduce((sum, result) => sum + Number(result.uploadBandwidthMB || 0), 0),
       successRate: Math.round((successful.length / samples) * 100),
-      resultData: { samples, packetLossPercent: packetLoss },
+      resultData: { samples, httpFailureRate },
     };
   }
 

@@ -1,0 +1,8 @@
+.task-details { max-width: 980px; margin: 0 auto; padding: 24px; }
+.task-details h1, .task-details h2 { margin: 20px 0 12px; }
+.task-details-grid { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); gap: 10px 18px; }
+.task-details-grid dt { font-weight: 700; }
+.task-details-grid dd { margin: 0; overflow-wrap: anywhere; }
+.task-details-grid pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+.task-execution { border: 1px solid var(--card-border, #ccd4df); border-radius: 8px; padding: 16px; margin: 16px 0; }
+@media (max-width: 600px) { .task-details-grid { grid-template-columns: 1fr; gap: 4px; } .task-details-grid dd { margin-bottom: 12px; } }

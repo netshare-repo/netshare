@@ -3,7 +3,14 @@ class ApiConstants {
   // Use http://<laptop_ip>:8000/api for real device
   // Use http://localhost:8000/api for Chrome/Web
 
-  static const String baseUrl = String.fromEnvironment('NETSHARE_API_URL', defaultValue: 'http://10.113.75.193:8000/api');
+  // Never commit a laptop's DHCP address here. Emulator builds use Android's
+  // host alias by default. Physical-device development should pass
+  // --dart-define=NETSHARE_API_URL=http://127.0.0.1:8000/api with
+  // `adb reverse tcp:8000 tcp:8000`, or provide a reachable LAN/HTTPS URL.
+  static const String baseUrl = String.fromEnvironment(
+    'NETSHARE_API_URL',
+    defaultValue: 'http://10.0.2.2:8000/api',
+  );
 
   // Auth
   static const String register = "/auth/register";

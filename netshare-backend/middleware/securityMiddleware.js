@@ -52,7 +52,7 @@ export const sanitizeInputs = (req, res, next) => {
  * Task submission authorization: validates URL scheme, safe hostnames, and service limits
  */
 export const validateTaskSubmission = (req, res, next) => {
-  const { targetUrl, serviceType, targetRegion, executionLimit } = req.body;
+  const { targetUrl, serviceType, targetRegion, executionLimit, method = 'GET' } = req.body;
 
   if (!targetUrl || !serviceType || !targetRegion || !executionLimit) {
     return res.status(400).json({
@@ -62,6 +62,9 @@ export const validateTaskSubmission = (req, res, next) => {
 
   try {
     const parsed = new URL(targetUrl);
+    if (parsed.username || parsed.password) {
+      return res.status(400).json({ message: 'Target URL must not contain credentials' });
+    }
     if (!["http:", "https:"].includes(parsed.protocol)) {
       return res.status(400).json({
         message: "Invalid target URL protocol. Only HTTP and HTTPS are permitted.",
@@ -82,14 +85,19 @@ export const validateTaskSubmission = (req, res, next) => {
     });
   }
 
+  if (serviceType === 'ad_verification') {
+    return res.status(400).json({ message: 'Ad verification requires an expected ad identifier and is not supported yet' });
+  }
   const supportedServices = [
-    "ad_verification",
     "accessibility_testing",
     "localization_testing",
     "performance_testing",
   ];
   if (!supportedServices.includes(serviceType)) {
     return res.status(400).json({ message: "Unsupported service type" });
+  }
+  if (method !== 'GET') {
+    return res.status(400).json({ message: 'Only GET requests are supported for client tasks' });
   }
 
   if (typeof targetRegion !== "string" || !targetRegion.trim() || targetRegion.length > 80) {

@@ -204,7 +204,7 @@ function ClientDashboard() {
               <h3>Distributed Network</h3>
               <p>
                 Tasks are assigned to active node participants using
-                backend-controlled simulation.
+                authorized secure routing.
               </p>
             </div>
           </div>

@@ -4,11 +4,13 @@ import '../../services/auth_service.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 import '../role_home_screen.dart';
+import '../login_screen.dart';
 
 class VerifyOtpScreen extends StatefulWidget {
   final String email;
+  final String? developmentOtp;
 
-  const VerifyOtpScreen({super.key, required this.email});
+  const VerifyOtpScreen({super.key, required this.email, this.developmentOtp});
 
   @override
   State<VerifyOtpScreen> createState() => _VerifyOtpScreenState();
@@ -16,13 +18,27 @@ class VerifyOtpScreen extends StatefulWidget {
 
 class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   final otpController = TextEditingController();
+  String? developmentOtp;
   bool isLoading = false;
   bool isResending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    developmentOtp = widget.developmentOtp;
+    if (developmentOtp != null) otpController.text = developmentOtp!;
+  }
+
+  @override
+  void dispose() {
+    otpController.dispose();
+    super.dispose();
+  }
 
   Future<void> submit() async {
     final otp = otpController.text.trim();
 
-    if (otp.isEmpty || otp.length != 6) {
+    if (!RegExp(r'^\d{6}$').hasMatch(otp)) {
       showMessage('Please enter a valid 6-digit OTP');
       return;
     }
@@ -61,10 +77,16 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
     setState(() => isResending = true);
     try {
       final response = await AuthService.resendSignupOtp(email: widget.email);
-      if (response['devOtp'] != null) {
-        showMessage('OTP sent. (Dev OTP: ${response['devOtp']})');
+      if (!mounted) return;
+      final newDevelopmentOtp = response['devOtp']?.toString();
+      setState(() {
+        developmentOtp = newDevelopmentOtp;
+        otpController.text = newDevelopmentOtp ?? '';
+      });
+      if (newDevelopmentOtp != null) {
+        showMessage('New development OTP ready. Use the code shown here.');
       } else {
-        showMessage('A new OTP has been sent to your email.');
+        showMessage('A new OTP has been sent to your selected channel.');
       }
     } catch (e) {
       showMessage(e.toString().replaceAll('Exception:', '').trim());
@@ -74,17 +96,15 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   }
 
   void showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Verify Email'),
-      ),
+      appBar: AppBar(title: const Text('Verify Account')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(22),
@@ -107,6 +127,19 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                   fontSize: 15,
                 ),
               ),
+              if (developmentOtp != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Development OTP (latest): $developmentOtp',
+                  style: const TextStyle(
+                    color: AppColors.primaryBlue,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              const Text('Resending replaces the previous code.'),
               const SizedBox(height: 32),
               CustomTextField(
                 controller: otpController,
@@ -135,6 +168,16 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                           'Resend OTP',
                           style: TextStyle(color: AppColors.primaryBlue),
                         ),
+                ),
+              ),
+              Center(
+                child: TextButton(
+                  onPressed: () => Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (_) => false,
+                  ),
+                  child: const Text('Sign in with password instead'),
                 ),
               ),
             ],

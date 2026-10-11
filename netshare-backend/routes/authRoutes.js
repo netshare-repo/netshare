@@ -13,6 +13,8 @@ import { protect } from '../middleware/authMiddleware.js';
 import { checkOtpAttempts, checkResendCooldown } from '../middleware/otpProtection.js';
 
 const router = express.Router();
+// The legacy 'email' request key accepts either canonical identity for compatibility.
+router.use((req, _res, next) => { if (req.body?.identifier !== undefined) req.body.email = req.body.identifier; next(); });
 
 router.post('/register', registerUser);
 router.post('/verify-signup-otp', checkOtpAttempts, verifySignupOtp);

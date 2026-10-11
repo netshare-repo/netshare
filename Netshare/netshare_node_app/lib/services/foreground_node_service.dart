@@ -41,7 +41,10 @@ class ForegroundNodeService {
       await NodeService.startParticipation();
       _addLog("Participation session marked active in Control Plane.");
     } catch (e) {
-      _addLog("Control plane start note: ${e.toString()}");
+      _isRunning = false;
+      isRunningNotifier.value = false;
+      _addLog('Participation start refused: $e');
+      rethrow;
     }
 
     // Determine server URL (stripping '/api' from ApiConstants.baseUrl)

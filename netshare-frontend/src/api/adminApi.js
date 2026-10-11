@@ -1,5 +1,8 @@
 import axiosInstance from "./axiosInstance";
 
+export const getAdminUserDetails = async (id) => (await axiosInstance.get(`/admin/users/${id}`)).data;
+export const restrictUser = async (id, note) => (await axiosInstance.put(`/admin/users/${id}/restrict`, { note })).data;
+
 export const getAdminDashboard = async () => {
   const res = await axiosInstance.get("/admin/dashboard");
   return res.data;

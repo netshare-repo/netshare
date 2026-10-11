@@ -5,6 +5,10 @@ import Wallet from "../models/Wallet.js";
 import generateToken from "../utils/generateToken.js";
 import { isValidEmail, isStrongPassword, isValidPhone } from "../utils/validation.js";
 import { sendOtpEmail } from '../services/emailService.js';
+import { findIdentity, normalizePhone } from '../services/identityService.js';
+import { sendSmsOtp, smsAvailable } from '../services/smsService.js';
+const sendCode = (user, otp, purpose) => user.verificationMethod === 'sms'
+  ? sendSmsOtp(user.phone, otp, purpose) : sendOtpEmail(user.email, otp, purpose);
 import logger from '../lib/logger.js';
 import config from '../config/env.js';
 import { runTransaction } from '../lib/mongoTransaction.js';
@@ -14,17 +18,49 @@ const generateOTP = () => {
   return crypto.randomInt(100000, 1000000).toString();
 };
 
+// Explicit local-development escape hatch; production and tests retain OTP.
+const developmentOtpDisabled = () => !config.isProduction &&
+  process.env.NODE_ENV === 'development' &&
+  process.env.DEV_SKIP_OTP_VERIFICATION === 'true';
+
+const authUser = user => ({
+  id: user._id,
+  name: user.name,
+  email: user.email,
+  phone: user.phone,
+  role: user.role,
+});
+
+// Standalone MongoDB cannot run the normal verification transaction. The
+// wallet upsert is idempotent, and password login can finish an interrupted
+// activation without creating or crediting the wallet twice.
+const activateDevelopmentAccount = async user => {
+  const balance = user.role === 'platform_client' || user.role === 'both' ? 500 : 0;
+  try {
+    await Wallet.updateOne({ userId: user._id },
+      { $setOnInsert: { userId: user._id, balance } }, { upsert: true });
+  } catch (error) {
+    if (error.code !== 11000 || !await Wallet.exists({ userId: user._id })) throw error;
+  }
+  await User.updateOne({ _id: user._id, isVerified: false }, { $set: {
+    isVerified: true, signupOtpHash: null, signupOtpExpires: null,
+    otpAttempts: 0, otpLockedUntil: null,
+  } });
+};
+
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, phone, password, role } = req.body;
+    const { name, password, role, verificationMethod = 'email' } = req.body;
+    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const phone = req.body.phone ? normalizePhone(req.body.phone) : '';
 
-    if (!name || !email || !password || !role) {
+    if (!name || !password || !role || (!email && !phone)) {
       return res.status(400).json({
         message: "Name, email, password and role are required",
       });
     }
 
-    if (!isValidEmail(email)) {
+    if (email && !isValidEmail(email)) {
       return res.status(400).json({ message: "Invalid email format" });
     }
 
@@ -34,8 +70,8 @@ export const registerUser = async (req, res) => {
       });
     }
 
-    if (phone && !isValidPhone(phone)) {
-      return res.status(400).json({ message: "Invalid phone format" });
+    if (req.body.phone && !phone) {
+      return res.status(400).json({ message: 'Use a unique international phone number such as +923001234567' });
     }
 
     const allowedRoles = ["node_participant", "platform_client", "both"];
@@ -44,41 +80,67 @@ export const registerUser = async (req, res) => {
       return res.status(400).json({ message: "Invalid role selected" });
     }
 
-    const existingUser = await User.findOne({ email });
+    if (!['email', 'sms'].includes(verificationMethod) || (verificationMethod === 'email' && !email) || (verificationMethod === 'sms' && !phone)) {
+      return res.status(400).json({ message: 'Select email verification with an email address or SMS OTP with a mobile number' });
+    }
+    const skipOtp = developmentOtpDisabled();
+    if (verificationMethod === 'sms' && !skipOtp && !smsAvailable()) return res.status(503).json({ message: 'SMS verification is not configured' });
+    // Only the selected verification channel is an authentication identity.
+    const existingUser = await User.findOne(verificationMethod === 'sms'
+      ? { phone, verificationMethod: 'sms' }
+      : { email });
 
     if (existingUser) {
-      return res.status(400).json({ message: "Email already registered" });
+      return res.status(409).json({ message: existingUser.isVerified === false
+        ? skipOtp
+          ? 'Account already created. Sign in with your password to finish local activation.'
+          : 'Account already created but not verified. Request a new OTP.'
+        : verificationMethod === 'sms' ? 'Mobile number already registered' : 'Email already registered' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const otp = generateOTP();
-    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
-    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const otp = skipOtp ? null : generateOTP();
+    const otpHash = otp ? crypto.createHash('sha256').update(otp).digest('hex') : null;
+    const otpExpires = otp ? new Date(Date.now() + 10 * 60 * 1000) : null; // 10 minutes
 
     const user = await User.create({
       name,
-      email,
+      email: verificationMethod === 'email' ? email : undefined,
       phone,
+      verificationMethod,
       password: hashedPassword,
       role,
       isVerified: false,
       signupOtpHash: otpHash,
       signupOtpExpires: otpExpires,
-      lastOtpSentAt: new Date(),
+      lastOtpSentAt: otp ? new Date() : undefined,
     });
+
+    if (skipOtp) {
+      await activateDevelopmentAccount(user);
+      logger.warn({ userId: user._id }, 'Development-only signup OTP bypass used');
+      return res.status(201).json({
+        message: 'Registration successful in local development mode.',
+        verificationRequired: false,
+        token: generateToken(user._id),
+        user: authUser(user),
+      });
+    }
 
     // Send OTP via email
     try {
-      await sendOtpEmail(user.email, otp, 'signup');
+      await sendCode(user, otp, 'signup');
     } catch (emailErr) {
-      logger.warn({ err: emailErr, email: user.email }, 'Failed to send signup OTP email');
-      // Do not fail registration if email fails — user can resend
+      logger.warn({ userId: user._id }, 'Verification delivery failed');
+      return res.status(503).json({ message: 'Account created but verification delivery failed. Retry using resend.', userId: user._id });
     }
 
     const response = {
-      message: "Registration successful. Please verify your email.",
+      message: 'Registration successful. Enter the verification code sent to your selected channel.',
       userId: user._id,
       email: user.email,
+      identifier: verificationMethod === 'sms' ? user.phone : user.email,
+      verificationMethod,
     };
 
     if (process.env.NODE_ENV === "development") {
@@ -87,6 +149,7 @@ export const registerUser = async (req, res) => {
 
     return res.status(201).json(response);
   } catch (error) {
+    if (error.code === 11000) return res.status(409).json({ message: 'Email or mobile number already registered' });
     return res.status(500).json({
       message: "Registration failed",
       error: error.message,
@@ -96,13 +159,16 @@ export const registerUser = async (req, res) => {
 
 export const verifySignupOtp = async (req, res) => {
   try {
+    if (developmentOtpDisabled()) {
+      return res.status(409).json({ message: 'Signup OTP is disabled for local development. Sign in with your password instead.' });
+    }
     const { email, otp } = req.body;
 
     if (!email || typeof otp !== 'string' || !/^\d{6}$/.test(otp)) {
       return res.status(400).json({ message: "Email and OTP are required" });
     }
 
-    const user = await User.findOne({ email });
+    const user = await findIdentity(email);
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -114,13 +180,13 @@ export const verifySignupOtp = async (req, res) => {
 
     const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
 
-    if (user.signupOtpHash !== otpHash) {
-      await recordFailedOtpAttempt(user);
-      return res.status(400).json({ message: "Invalid OTP" });
+    if (!user.signupOtpHash || !user.signupOtpExpires || new Date() > user.signupOtpExpires) {
+      return res.status(400).json({ message: "OTP has expired. Request a new code." });
     }
 
-    if (new Date() > user.signupOtpExpires) {
-      return res.status(400).json({ message: "OTP has expired" });
+    if (user.signupOtpHash !== otpHash) {
+      await recordFailedOtpAttempt(user);
+      return res.status(400).json({ message: "Invalid OTP. Use the latest code; requesting a new OTP replaces the previous one." });
     }
 
     const verified = await runTransaction(async session => {
@@ -149,22 +215,25 @@ export const verifySignupOtp = async (req, res) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
-      message: "Verification failed",
-      error: error.message,
+    if (error.status === 503) return res.status(503).json({
+      message: 'Verification needs MongoDB replica set transactions. Configure a replica set, then retry or request a new OTP if the code expired.',
     });
+    return res.status(500).json({ message: "Verification failed" });
   }
 };
 
 export const resendSignupOtp = async (req, res) => {
   try {
+    if (developmentOtpDisabled()) {
+      return res.status(409).json({ message: 'Signup OTP is disabled for local development. Sign in with your password instead.' });
+    }
     const { email } = req.body;
 
     if (!email) {
       return res.status(400).json({ message: "Email is required" });
     }
 
-    const user = await User.findOne({ email });
+    const user = await findIdentity(email);
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -185,9 +254,9 @@ export const resendSignupOtp = async (req, res) => {
 
     // Send OTP via email
     try {
-      await sendOtpEmail(user.email, otp, 'resend');
+      await sendCode(user, otp, 'resend');
     } catch (emailErr) {
-      logger.warn({ err: emailErr, email: user.email }, 'Failed to send resend OTP email');
+      return res.status(503).json({ message: 'Verification delivery failed; retry later' });
     }
 
     const response = {
@@ -217,14 +286,14 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email });
+    const user = await findIdentity(email);
 
     if (!user) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
     // Explicitly check for false to allow legacy users (undefined/true) to pass
-    if (user.isVerified === false) {
+    if (user.isVerified === false && !developmentOtpDisabled()) {
       return res.status(403).json({ message: "Please verify your email before logging in" });
     }
 
@@ -236,6 +305,11 @@ export const loginUser = async (req, res) => {
 
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid email or password" });
+    }
+
+    if (user.isVerified === false) {
+      await activateDevelopmentAccount(user);
+      logger.warn({ userId: user._id }, 'Development-only signup OTP bypass used for existing account');
     }
 
     return res.json({
@@ -265,7 +339,7 @@ export const forgotPassword = async (req, res) => {
       return res.status(400).json({ message: "Email is required" });
     }
 
-    const user = await User.findOne({ email });
+    const user = await findIdentity(email);
 
     if (!user) {
       // Do not reveal if user exists or not
@@ -283,7 +357,7 @@ export const forgotPassword = async (req, res) => {
 
     // Send OTP via email
     try {
-      await sendOtpEmail(user.email, otp, 'reset');
+      await sendCode(user, otp, 'reset');
     } catch (emailErr) {
       logger.warn({ err: emailErr, email: user.email }, 'Failed to send reset OTP email');
     }
@@ -313,7 +387,7 @@ export const verifyResetOtp = async (req, res) => {
       return res.status(400).json({ message: "Email and OTP are required" });
     }
 
-    const user = await User.findOne({ email });
+    const user = await findIdentity(email);
 
     if (!user) {
       return res.status(400).json({ message: "Invalid OTP or Email" });
@@ -357,7 +431,7 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email });
+    const user = await findIdentity(email);
 
     if (!user) {
       return res.status(400).json({ message: "Invalid OTP or Email" });
@@ -389,7 +463,8 @@ export const resetPassword = async (req, res) => {
 };
 
 export const getMe = async (req, res) => {
+  const { publicUser } = await import('../utils/publicUser.js');
   return res.json({
-    user: req.user,
+    user: publicUser(req.user),
   });
 };

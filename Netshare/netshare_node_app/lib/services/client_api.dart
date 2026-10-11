@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../core/constants/api_constants.dart';
@@ -47,17 +48,34 @@ class ClientApi {
       'Content-Type': 'application/json',
     };
     final uri = Uri.parse('$baseUrl$path');
-    final response =
-        await (method == 'GET'
-                ? _http.get(uri, headers: headers)
-                : method == 'PUT'
-                ? _http.put(uri, headers: headers, body: jsonEncode(body ?? {}))
-                : _http.post(
-                    uri,
-                    headers: headers,
-                    body: jsonEncode(body ?? {}),
-                  ))
-            .timeout(const Duration(seconds: 20));
+    late final http.Response response;
+    try {
+      response =
+          await (method == 'GET'
+                  ? _http.get(uri, headers: headers)
+                  : method == 'PUT'
+                  ? _http.put(
+                      uri,
+                      headers: headers,
+                      body: jsonEncode(body ?? {}),
+                    )
+                  : _http.post(
+                      uri,
+                      headers: headers,
+                      body: jsonEncode(body ?? {}),
+                    ))
+              .timeout(const Duration(seconds: 20));
+    } on TimeoutException {
+      throw ClientApiException(
+        503,
+        'Cannot reach the NetShare backend at $baseUrl.',
+      );
+    } on http.ClientException {
+      throw ClientApiException(
+        503,
+        'Cannot reach the NetShare backend at $baseUrl.',
+      );
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       String message = response.statusCode == 401
           ? 'Session expired. Sign in again.'
@@ -148,6 +166,15 @@ class ClientApi {
   }
 
   Future<Map<String, dynamic>> wallet() => _json('GET', '/wallet');
+  Future<Map<String, dynamic>> withdrawals() =>
+      _json('GET', '/wallet/withdrawals');
+  Future<Map<String, dynamic>> submitWithdrawal(Map<String, dynamic> input) {
+    if (!['node_participant', 'both'].contains(role)) {
+      throw const ClientApiException(403, 'Node Participant role required.');
+    }
+    return _json('POST', '/wallet/withdrawals', input);
+  }
+
   Future<Map<String, dynamic>> history() =>
       _json('GET', '/wallet/transactions');
   Future<Map<String, dynamic>> topups() => _json('GET', '/wallet/top-ups');

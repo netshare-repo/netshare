@@ -35,7 +35,7 @@ export class MetricsCollector {
     const totalDiff = current.total - prev.total;
     const idleDiff = current.idle - prev.idle;
 
-    if (totalDiff <= 0) return 1.5;
+    if (totalDiff <= 0) return null;
     const usage = ((totalDiff - idleDiff) / totalDiff) * 100;
     return parseFloat(Math.max(0, Math.min(100, usage)).toFixed(1));
   }

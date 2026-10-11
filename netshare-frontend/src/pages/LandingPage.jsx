@@ -73,7 +73,7 @@ function LandingPage() {
     },
     {
       q: "Is real WebRTC or VPN routing implemented?",
-      a: "Current Phase-1 uses backend-controlled secure session simulation. Real WebRTC or Android VpnService routing is planned for future phases."
+      a: "Tasks use an authorized WebRTC DataChannel and controlled Android VPN routing. Real-device and separated-network acceptance testing is still pending."
     }
   ];
 
@@ -553,8 +553,8 @@ function LandingPage() {
             <div className="image-fallback-container" style={{ width: "100%", maxWidth: "400px", minHeight: "300px" }}>
               <div className="css-mockup-content" style={{ textAlign: "center", background: "var(--bg-white)", padding: "40px", borderRadius: "24px", boxShadow: "var(--shadow-lg)", border: "1px solid var(--card-border)" }}>
                 <ShieldCheck size={80} color="var(--primary)" style={{ margin: "0 auto 20px" }} />
-                <h3>Phase-1 Simulation</h3>
-                <p style={{ fontSize: "0.95rem", marginTop: "15px" }}>Phase-1 uses backend-controlled secure session simulation and is designed for future secure routing expansion.</p>
+                <h3>Controlled Node Routing</h3>
+                <p style={{ fontSize: "0.95rem", marginTop: "15px" }}>Authorized tests run through participating Android nodes. Real-device network acceptance testing remains pending.</p>
               </div>
               <img 
                 src="/assets/images/netshare-trust-illustration.png" 

@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicLong
  * 4. Active TUN Forwarder thread processes packets, responds to ping latency probes,
  *    and tracks real throughput metrics (packetsIn, bytesIn, packetsOut, bytesOut).
  * 5. Runs as an Android Foreground Service with persistent status notification,
- *    guaranteeing survival during background execution and screen lock.
+ *    supporting background execution; actual OEM/screen-lock behavior requires device validation.
  * 6. Handles onRevoke() gracefully when revoked by system or user.
  */
 class NetShareVpnService : VpnService() {
@@ -102,6 +102,11 @@ class NetShareVpnService : VpnService() {
         private val bytesOut = AtomicLong(0)
         private val packetsIn = AtomicLong(0)
         private val packetsOut = AtomicLong(0)
+        private var sampleNanos = System.nanoTime()
+        private var sampleIn = 0L
+        private var sampleOut = 0L
+        private var uploadMbps = 0.0
+        private var downloadMbps = 0.0
 
         private val listeners = mutableListOf<VpnStateListener>()
 
@@ -162,13 +167,24 @@ class NetShareVpnService : VpnService() {
         /**
          * Returns snapshot of TUN metrics.
          */
-        fun getTunMetrics(): Map<String, Any> {
+        @Synchronized fun getTunMetrics(): Map<String, Any> {
+            val now = System.nanoTime()
+            val elapsed = now - sampleNanos
+            if (elapsed >= 1000000000L) {
+                uploadMbps = maxOf(0L, bytesIn.get() - sampleIn) * 8000.0 / elapsed
+                downloadMbps = maxOf(0L, bytesOut.get() - sampleOut) * 8000.0 / elapsed
+                sampleIn = bytesIn.get(); sampleOut = bytesOut.get(); sampleNanos = now
+            }
             return mapOf(
+                "uploadSpeedMbps" to uploadMbps,
+                "downloadSpeedMbps" to downloadMbps,
+                "measuredAtMs" to System.currentTimeMillis(),
                 "bytesIn" to bytesIn.get(),
                 "bytesOut" to bytesOut.get(),
                 "packetsIn" to packetsIn.get(),
                 "packetsOut" to packetsOut.get(),
                 "state" to currentState.name.lowercase(),
+                "routingSessionId" to (activeInstance?.routingSessionId ?: ""),
                 "routingScope" to currentRoutingScope
             )
         }
@@ -187,6 +203,7 @@ class NetShareVpnService : VpnService() {
     @Volatile private var authorizedHost: String = ""
     @Volatile private var authorizedMethod: String = ""
     @Volatile private var routingSessionId: String = ""
+    @Volatile private var trafficPolicy: TrafficPolicy? = null
 
     private data class TcpFlowKey(
         val sourceIp: Int,
@@ -225,7 +242,8 @@ class NetShareVpnService : VpnService() {
                     routeHost,
                     routePort,
                     routeMethod,
-                    routeIps
+                    routeIps,
+                    intent.getStringExtra("traffic_policy") ?: ""
                 )
             }
             ACTION_STOP -> {
@@ -254,7 +272,8 @@ class NetShareVpnService : VpnService() {
         routeHost: String,
         routePort: Int,
         routeMethod: String,
-        routeIps: List<String>
+        routeIps: List<String>,
+        policyJson: String
     ) {
         val normalizedMethod = routeMethod.uppercase()
         val parsedIps = routeIps.mapNotNull { parsePublicIpv4(it) }.toSet()
@@ -288,6 +307,23 @@ class NetShareVpnService : VpnService() {
         notifyStateChanged(State.CONNECTING, scope)
 
         try {
+            val policy = org.json.JSONObject(policyJson)
+            val day = policy.getString("utcDay")
+            val format = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC"); isLenient = false
+            }
+            require(day == format.format(java.util.Date())) { "Stale traffic policy" }
+            val nodeId = policy.getString("nodeId")
+            require(nodeId.matches(Regex("[a-fA-F0-9]{24}"))) { "Invalid policy node" }
+            val prefs = getSharedPreferences("traffic-policy", MODE_PRIVATE)
+            val key = "$nodeId:$day"
+            val initialUsed = maxOf(prefs.getLong(key, 0), policy.getLong("settledUsedBytes"))
+            trafficPolicy = TrafficPolicy(policy.getLong("dailyLimitBytes"), initialUsed,
+                policy.getDouble("uploadMbps"), policy.getDouble("downloadMbps"),
+                format.parse(day)!!.time + 86400000L,
+                { reserved -> prefs.edit().putLong(key, reserved).commit() })
+            sampleIn = 0; sampleOut = 0; sampleNanos = System.nanoTime()
+            uploadMbps = 0.0; downloadMbps = 0.0
             // Foreground notification is required for background operation and screen lock
             val notification = buildForegroundNotification("NetShare Secure Routing Active", "Scope: $scope")
             startForeground(NOTIFICATION_ID, notification)
@@ -352,6 +388,7 @@ class NetShareVpnService : VpnService() {
                 while (isForwarderRunning.get()) {
                     val length = inputStream.read(buffer)
                     if (length <= 0) continue
+                    (trafficPolicy ?: throw IOException("Traffic policy missing")).consume(length, true)
 
                     packetsIn.incrementAndGet()
                     bytesIn.addAndGet(length.toLong())
@@ -363,6 +400,9 @@ class NetShareVpnService : VpnService() {
                     Log.w(TAG, "TUN forwarder loop ended with exception: ${e.message}")
                 }
             } finally {
+                if (isForwarderRunning.getAndSet(false)) {
+                    android.os.Handler(mainLooper).post { stopTunnel("TUN forwarding ended") }
+                }
                 tunOutputStream = null
                 try { inputStream.close() } catch (_: Exception) {}
                 try { outputStream.close() } catch (_: Exception) {}
@@ -378,7 +418,11 @@ class NetShareVpnService : VpnService() {
         isForwarderRunning.set(false)
         for (tunnel in tcpFlows.values) tunnel.close()
         tcpFlows.clear()
-        tunWorkerThread?.interrupt()
+        val worker = tunWorkerThread
+        worker?.interrupt()
+        if (worker != null && worker !== Thread.currentThread()) {
+            try { worker.join(2000) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+        }
         tunWorkerThread = null
     }
 
@@ -570,6 +614,7 @@ class NetShareVpnService : VpnService() {
 
         val output = tunOutputStream ?: return
         try {
+            (trafficPolicy ?: throw IOException("Traffic policy missing")).consume(packet.size, false)
             synchronized(tunWriteLock) {
                 output.write(packet)
                 output.flush()
@@ -578,6 +623,9 @@ class NetShareVpnService : VpnService() {
             bytesOut.addAndGet(packet.size.toLong())
         } catch (error: IOException) {
             if (isForwarderRunning.get()) Log.w(TAG, "TUN write error: ${error.message}")
+            isForwarderRunning.set(false)
+            android.os.Handler(mainLooper).post { stopTunnel("Traffic limit or TUN failure") }
+            throw error
         }
     }
 
@@ -700,12 +748,13 @@ class NetShareVpnService : VpnService() {
         (sequence + amount.toLong()) and 0xFFFFFFFFL
 
     private fun closeTunnelInterface() {
-        stopTunForwarder()
+        isForwarderRunning.set(false)
         try {
             vpnInterface?.close()
         } catch (error: IOException) {
             Log.w(TAG, "Error closing VPN interface", error)
         } finally {
+            stopTunForwarder()
             vpnInterface = null
             activeInstance = null
             allowedTargetIps = emptySet()

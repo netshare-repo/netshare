@@ -221,6 +221,15 @@ function NodeSession() {
                   {sessionData?.node?.downloadSpeedCap || 10} Mbps Down
                 </span>
               </div>
+              <div className="spec-item">
+                <span className="spec-label">Measured current throughput</span>
+                <span className="spec-value">{sessionData?.uploadSpeedMbps == null ? 'Not measured' : `${sessionData.uploadSpeedMbps.toFixed(3)} Mbps up`} / {sessionData?.downloadSpeedMbps == null ? 'Not measured' : `${sessionData.downloadSpeedMbps.toFixed(3)} Mbps down`}</span>
+              </div>
+              <div className="spec-item">
+                <span className="spec-label">Stability (probe RTT jitter)</span>
+                <span className="spec-value">{sessionData?.stabilityJitterMs == null ? 'Not measured' : `${sessionData.stabilityJitterMs.toFixed(2)} ms`}</span>
+              </div>
+              {sessionData?.packetLossSource && <p>Loss is from four STUN binding probes with a 400 ms response deadline, not HTTP failure rate.</p>}
 
               <div className="spec-item">
                 <span className="spec-label">Reliability Index</span>

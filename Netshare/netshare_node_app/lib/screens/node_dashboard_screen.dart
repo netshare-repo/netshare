@@ -5,11 +5,13 @@ import '../models/node_device_model.dart';
 import '../models/wallet_model.dart';
 import '../services/auth_service.dart';
 import '../services/node_service.dart';
+import '../services/foreground_node_service.dart';
 import '../services/wallet_service.dart';
 import '../services/client_api.dart';
 import '../widgets/notification_button.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/dashboard_card.dart';
+import '../widgets/live_node_metrics.dart';
 
 import 'assigned_task_screen.dart';
 import 'login_screen.dart';
@@ -74,9 +76,13 @@ class _NodeDashboardScreenState extends State<NodeDashboardScreen> {
 
     try {
       if (node!.status == 'active' || node!.status == 'busy') {
-        await NodeService.stopParticipation();
+        if (ForegroundNodeService.isRunning) {
+          await ForegroundNodeService.stop();
+        } else {
+          await NodeService.stopParticipation();
+        }
       } else {
-        await NodeService.startParticipation();
+        await ForegroundNodeService.start();
       }
 
       await loadDashboard();
@@ -102,9 +108,9 @@ class _NodeDashboardScreenState extends State<NodeDashboardScreen> {
   void showMessage(String message) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Color statusColor(String status) {
@@ -151,15 +157,10 @@ class _NodeDashboardScreenState extends State<NodeDashboardScreen> {
           style: TextStyle(fontWeight: FontWeight.w900),
         ),
         actions: [
-          if (widget.notificationApi != null) NotificationButton(api: widget.notificationApi!),
-          IconButton(
-            onPressed: loadDashboard,
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            onPressed: logout,
-            icon: const Icon(Icons.logout),
-          ),
+          if (widget.notificationApi != null)
+            NotificationButton(api: widget.notificationApi!),
+          IconButton(onPressed: loadDashboard, icon: const Icon(Icons.refresh)),
+          IconButton(onPressed: logout, icon: const Icon(Icons.logout)),
         ],
       ),
       body: isLoading
@@ -211,6 +212,7 @@ class _NodeDashboardScreenState extends State<NodeDashboardScreen> {
                               fontWeight: FontWeight.w900,
                             ),
                           ),
+                          if (node != null) const LiveNodeMetrics(),
                           const SizedBox(height: 8),
                           Text(
                             node == null
@@ -298,8 +300,9 @@ class _NodeDashboardScreenState extends State<NodeDashboardScreen> {
                             ? 'Stop Participation'
                             : 'Start Participation',
                         isLoading: actionLoading,
-                        backgroundColor:
-                            isActive ? AppColors.dangerRed : AppColors.successGreen,
+                        backgroundColor: isActive
+                            ? AppColors.dangerRed
+                            : AppColors.successGreen,
                         onPressed: startStopNode,
                       ),
                       const SizedBox(height: 12),
@@ -307,12 +310,12 @@ class _NodeDashboardScreenState extends State<NodeDashboardScreen> {
                         text: 'View Assigned Task',
                         backgroundColor: AppColors.darkNavy,
                         onPressed: () {
-                           Navigator.push(
-                             context,
-                             MaterialPageRoute(
-                               builder: (_) => const AssignedTaskScreen(),
-                             ),
-                           );
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AssignedTaskScreen(),
+                            ),
+                          );
                         },
                       ),
                       const SizedBox(height: 12),

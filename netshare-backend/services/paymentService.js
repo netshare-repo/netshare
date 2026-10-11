@@ -117,19 +117,32 @@ export const reviewTopUp = (id, adminId, decision, noteInput) => withFinancialTr
 });
 
 export const createWithdrawal = (userId, input) => withFinancialTransaction(async (session) => {
-  const { amount, method, accountDetails } = input || {};
+  const { amount, method, accountDetails, requestId } = input || {};
+  if (requestId !== undefined && (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId))) {
+    throw paymentError(400, 'Invalid withdrawal request ID');
+  }
+  const requestKey = requestId ? `${userId}:${requestId}` : undefined;
   if (!validAmount(amount) || !methods.has(method)) throw paymentError(400, "Invalid amount or withdrawal method");
   const account = typeof accountDetails === "string" ? accountDetails.trim() : "";
   if (account.length < 5 || account.length > 120 || /[\r\n<>]/.test(account)) {
     throw paymentError(400, "Valid withdrawal account details are required");
   }
   // Reserve only net earned credits. Demo/top-up credits cannot be cashed out.
+  if (requestKey) {
+    const existing = await WithdrawalRequest.findOne({ requestKey }).select('+accountDetails').session(session);
+    if (existing) {
+      if (existing.amount !== amount || existing.method !== method || existing.accountDetails !== account) {
+        throw paymentError(409, 'Request ID already used for different withdrawal details');
+      }
+      return existing;
+    }
+  }
   const wallet = await Wallet.findOneAndUpdate({
     userId, balance: { $gte: amount }, withdrawableCredits: { $gte: amount },
   }, { $inc: { balance: -amount, withdrawableCredits: -amount } }, { new: true, session });
   if (!wallet) throw paymentError(409, "Insufficient eligible withdrawal balance");
 
-  const request = new WithdrawalRequest({ userId, amount, method, accountDetails: account });
+  const request = new WithdrawalRequest({ userId, amount, method, accountDetails: account, requestKey });
   await request.save({ session });
   await CreditTransaction.create([{
     userId, type: "debit", amount, description: `Withdrawal reserved ${request._id}`,

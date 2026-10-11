@@ -56,9 +56,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -83,18 +83,15 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 8),
               const Text(
                 'Welcome back to NetShare.',
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 16,
-                ),
+                style: TextStyle(color: AppColors.textMuted, fontSize: 16),
               ),
               const SizedBox(height: 40),
               CustomTextField(
                 controller: emailController,
-                label: 'Email',
-                hint: 'Enter your email',
+                label: 'Email or verified mobile',
+                hint: 'Email or +923001234567',
                 icon: Icons.email_outlined,
-                keyboardType: TextInputType.emailAddress,
+                keyboardType: TextInputType.text,
               ),
               const SizedBox(height: 18),
               CustomTextField(
@@ -151,7 +148,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterScreen(),
+                        ),
                       );
                     },
                     child: const Text(

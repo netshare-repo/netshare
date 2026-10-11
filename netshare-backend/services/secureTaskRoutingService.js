@@ -19,6 +19,7 @@ import TaskResult from '../models/TaskResult.js';
 import TaskSession from '../models/TaskSession.js';
 import RoutingSession from '../models/RoutingSession.js';
 import NodeDevice from '../models/NodeDevice.js';
+import { trafficPolicyFor } from './trafficPolicyService.js';
 import BandwidthUsage from '../models/BandwidthUsage.js';
 import {
   createRoutingSession,
@@ -81,7 +82,13 @@ export const prepareAuthorizedTaskSession = async ({ taskId, clientId, nodeId })
   const authorizedHost = parsedUrl.hostname.toLowerCase();
   const defaultPort = parsedUrl.protocol === 'https:' ? 443 : 80;
   const authorizedPort = parsedUrl.port ? parseInt(parsedUrl.port, 10) : defaultPort;
-  const authorizedMethod = 'GET';
+  const authorizedMethod = task.method || 'GET';
+  if (authorizedMethod !== 'GET') {
+    throw Object.assign(new Error('Only GET requests are supported'), { code: 'UNSUPPORTED_METHOD' });
+  }
+  if (!['accessibility_testing', 'performance_testing', 'localization_testing'].includes(task.serviceType)) {
+    throw Object.assign(new Error(`Unsupported test behavior: ${task.serviceType}`), { code: 'UNSUPPORTED_SERVICE' });
+  }
 
   // 2. Create or bind RoutingSession
   const { session, authToken } = await createRoutingSession({
@@ -92,6 +99,7 @@ export const prepareAuthorizedTaskSession = async ({ taskId, clientId, nodeId })
 
   // 3. Build immutable task authorization envelope
   const taskEnvelope = {
+    trafficPolicy: trafficPolicyFor(await NodeDevice.findById(nodeId)),
     taskId: task._id.toString(),
     routingSessionId: session._id.toString(),
     targetUrl: task.targetUrl,
@@ -99,6 +107,7 @@ export const prepareAuthorizedTaskSession = async ({ taskId, clientId, nodeId })
     authorizedPort,
     authorizedMethod,
     serviceType: task.serviceType || 'performance_testing',
+    targetRegion: task.targetRegion,
     executionLimit: task.executionLimit || 1,
     timeoutMs: 25000,
     issuedAt: new Date().toISOString(),

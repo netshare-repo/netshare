@@ -22,11 +22,11 @@ const nodeTelemetrySchema = new mongoose.Schema(
     },
     latency: {
       type: Number,
-      default: 0, // In ms
+      default: null, // Unmeasured until a sample exists
     },
     packetLoss: {
       type: Number,
-      default: 0, // In %
+      default: null, // Unmeasured, not zero loss
     },
     onlineStatus: {
       type: String,

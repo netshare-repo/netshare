@@ -17,6 +17,17 @@ import config from '../config/env.js';
 const generateSessionId = () =>
   `sess_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
 
+const invalidSettings = (body) => {
+  for (const key of ['bandwidthLimitMB', 'bandwidthLimit', 'uploadSpeedCapMbps', 'downloadSpeedCapMbps', 'speedCapMbps', 'maxConcurrentTasks']) {
+    if (body[key] === undefined) continue;
+    const value = Number(body[key]);
+    if (!['number', 'string'].includes(typeof body[key]) || !Number.isFinite(value) || value <= 0 ||
+        (key === 'maxConcurrentTasks' && !Number.isSafeInteger(value))) return key;
+  }
+  if (body.region !== undefined && (typeof body.region !== 'string' || !body.region.trim() || body.region.length > 100)) return 'region';
+  return null;
+};
+
 /**
  * GET /api/node/availability
  * Live client-facing region capacity derived from nodes that can receive work now.
@@ -51,6 +62,8 @@ export const getAvailableRegions = async (req, res) => {
  */
 export const registerNode = async (req, res) => {
   try {
+    const invalid = invalidSettings(req.body);
+    if (invalid) return res.status(400).json({ message: `Invalid ${invalid}` });
     const {
       deviceName,
       deviceId,
@@ -85,9 +98,9 @@ export const registerNode = async (req, res) => {
       deviceFingerprint: deviceFingerprint || deviceId || "",
       region,
       bandwidthLimitMB: Number(bandwidthLimitMB),
-      uploadSpeedCapMbps: Number(uploadSpeedCapMbps || speedCapMbps || 5),
-      downloadSpeedCapMbps: Number(downloadSpeedCapMbps || speedCapMbps || 10),
-      speedCapMbps: Number(downloadSpeedCapMbps || speedCapMbps || 10),
+      uploadSpeedCapMbps: Number(req.body.uploadSpeedCapMbps ?? speedCapMbps ?? uploadSpeedCapMbps),
+      downloadSpeedCapMbps: Number(req.body.downloadSpeedCapMbps ?? speedCapMbps ?? downloadSpeedCapMbps),
+      speedCapMbps: Number(req.body.downloadSpeedCapMbps ?? speedCapMbps ?? downloadSpeedCapMbps),
       maxConcurrentTasks: Number(maxConcurrentTasks) || 1,
       status: "inactive",
       reliabilityScore: 100,
@@ -122,9 +135,7 @@ export const getNodeDashboard = async (req, res) => {
       });
     }
 
-    // Update heartbeat
-    node.lastSeenAt = new Date();
-    await node.save();
+    // Viewing a dashboard is not evidence of a live participant device.
 
     // Calculate credits earned today
     const startOfToday = new Date();
@@ -159,7 +170,7 @@ export const getNodeDashboard = async (req, res) => {
       creditsEarned: creditsEarnedToday,
       lifetimeCredits: wallet?.earnedCredits || wallet?.balance || 0,
       walletBalance: wallet?.balance || 0,
-      reliabilityScore: node.reliabilityScore || 100,
+      reliabilityScore: node.reliabilityScore ?? null,
       successRate: node.successRate ?? null,
       latencyMs: node.latencyMs ?? null,
       device: {
@@ -213,6 +224,8 @@ export const getMyNode = async (req, res) => {
  */
 export const updateNodeSettings = async (req, res) => {
   try {
+    const invalid = invalidSettings(req.body);
+    if (invalid) return res.status(400).json({ message: `Invalid ${invalid}` });
     const {
       region,
       bandwidthLimitMB,
@@ -231,10 +244,12 @@ export const updateNodeSettings = async (req, res) => {
 
     if (region !== undefined) node.region = region.trim();
     if (bandwidthLimitMB !== undefined || bandwidthLimit !== undefined) {
-      node.bandwidthLimitMB = Number(bandwidthLimitMB || bandwidthLimit);
+      node.bandwidthLimitMB = Number(bandwidthLimitMB ?? bandwidthLimit);
     }
     if (uploadSpeedCapMbps !== undefined) {
       node.uploadSpeedCapMbps = Number(uploadSpeedCapMbps);
+    } else if (speedCapMbps !== undefined) {
+      node.uploadSpeedCapMbps = Number(speedCapMbps);
     }
     if (downloadSpeedCapMbps !== undefined) {
       node.downloadSpeedCapMbps = Number(downloadSpeedCapMbps);
@@ -247,13 +262,14 @@ export const updateNodeSettings = async (req, res) => {
       node.maxConcurrentTasks = Math.max(1, Number(maxConcurrentTasks));
     }
 
-    node.lastSeenAt = new Date();
-    await node.save();
-
-    return res.json({
-      message: "Node settings updated successfully",
-      node,
-    });
+    // Atomic with allocation claims: an in-flight task retains its immutable policy.
+    const changes = Object.fromEntries(node.modifiedPaths().map(key => [key, node.get(key)]));
+    const updated = await NodeDevice.findOneAndUpdate(
+      { _id: node._id, currentActiveTasks: 0 }, { $set: changes }, { new: true, runValidators: true }
+    );
+    if (!updated) return res.status(409).json({ message: 'Wait for active tasks to finish before changing routing limits' });
+    // A settings request is not a device heartbeat.
+    return res.json({ message: "Node settings updated successfully", node: updated });
   } catch (error) {
     return res.status(500).json({
       message: "Failed to update node settings",
@@ -593,7 +609,8 @@ export const getCurrentSession = async (req, res) => {
       .populate("clientId", "name email");
 
     // Use actual stored latency from telemetry — no simulated noise
-    const currentLatency = node.latencyMs ?? null;
+    const recentHeartbeat = await NodeHeartbeat.findOne({ nodeId: node._id, timestamp: { $gte: new Date(Date.now() - 60000) } }).sort({ timestamp: -1 });
+    const currentLatency = recentHeartbeat?.networkStatus?.latencyMs ?? node.latencyMs ?? null;
 
     // Assess network quality based on latency & packet loss
     let quality = "Not measured";
@@ -613,7 +630,11 @@ export const getCurrentSession = async (req, res) => {
       assignedTask: assignedTaskSession || null,
       bandwidthConsumedMB: session.bandwidthUsed || session.bandwidthUsedMB || 0,
       latency: currentLatency,
-      packetLoss: session.packetLoss ?? null,
+      packetLoss: recentHeartbeat?.networkStatus?.packetLoss ?? null,
+      packetLossSource: recentHeartbeat?.networkStatus?.packetLossSource ?? null,
+      stabilityJitterMs: recentHeartbeat?.networkStatus?.stabilityJitterMs ?? null,
+      uploadSpeedMbps: recentHeartbeat?.networkStatus?.uploadSpeedMbps ?? null,
+      downloadSpeedMbps: recentHeartbeat?.networkStatus?.downloadSpeedMbps ?? null,
       networkQuality: quality,
       creditsGenerated: session.creditsEarned || 0,
       node: {

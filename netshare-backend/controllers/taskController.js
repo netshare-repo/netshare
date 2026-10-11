@@ -84,9 +84,13 @@ export const createTask = async (req, res) => {
     }
 
     const task = await runTransaction(async session => {
+    const owner = await User.findOneAndUpdate({ _id: req.user._id, status: 'active', isVerified: true,
+      role: { $in: ['platform_client', 'both'] } }, { $inc: { authorizationVersion: 1 } }, { session });
+    if (!owner) throw Object.assign(new Error('Account cannot submit tasks'), { status: 403 });
     const [task] = await TestingTask.create([{
       clientId: req.user._id,
       targetUrl,
+      method: 'GET',
       serviceType,
       targetRegion,
       executionLimit,
@@ -231,9 +235,9 @@ export const downloadTaskReport = async (req, res) => {
     if (!isOwner && req.user.role !== "admin") {
       return res.status(403).json({ message: "Access denied" });
     }
-    if (!["completed", "settled"].includes(task.status)) {
+    if (!["completed", "settled", "failed"].includes(task.status)) {
       return res.status(409).json({
-        message: "Report is available only after task completion",
+        message: "Report is available only after the task reaches a final result",
       });
     }
 
@@ -262,6 +266,31 @@ export const downloadTaskReport = async (req, res) => {
       "completedAt",
       "clientRating",
       "ratingComment",
+      "method",
+      "nodeRegion",
+      "requestedExecutions",
+      "attemptedExecutions",
+      "completedExecutions",
+      "totalDurationMs",
+      "execution",
+      "executionStartedAt",
+      "executionCompletedAt",
+      "executionSuccess",
+      "executionStatusCode",
+      "executionFinalUrl",
+      "executionContentType",
+      "executionLatencyMs",
+      "executionResponseSizeBytes",
+      "executionError",
+      "averageLatencyMs",
+      "totalResponseSizeBytes",
+      "resultError",
+      "executionDownloadBandwidthMB",
+      "executionUploadBandwidthMB",
+      "httpReachable",
+      "httpSuccess",
+      "contentLanguage",
+      "htmlLanguage",
     ];
     const row = [
       task._id,
@@ -284,9 +313,26 @@ export const downloadTaskReport = async (req, res) => {
       task.clientRating?.rating || "",
       task.clientRating?.comment || "",
     ];
-    const csv = `${headers.map(csvCell).join(",")}\r\n${row
-      .map(csvCell)
-      .join(",")}\r\n`;
+    const detail = result.resultData || {};
+    const executions = Array.isArray(detail.executions) && detail.executions.length
+      ? detail.executions : [null];
+    const csv = `${headers.map(csvCell).join(",")}\r\n${executions.map(execution => [
+      ...row,
+      task.method || 'GET', detail.nodeRegion || task.assignedNodeId?.region || '',
+      detail.requestedExecutions ?? '', detail.attemptedExecutions ?? '',
+      detail.completedExecutions ?? '', detail.totalDurationMs ?? '',
+      execution?.execution ?? '', execution?.startedAt ?? '', execution?.completedAt ?? '',
+      execution?.success ?? '', execution?.statusCode ?? '', execution?.finalUrl ?? '',
+      execution?.contentType ?? '', execution?.latencyMs ?? '',
+      execution?.responseSizeBytes ?? '', execution?.error ?? '',
+      detail.averageLatencyMs ?? '', detail.totalResponseSizeBytes ?? '',
+      detail.error ?? '', execution?.downloadBandwidthMB ?? '',
+      execution?.uploadBandwidthMB ?? '',
+      execution?.serviceEvidence?.httpReachable ?? '',
+      execution?.serviceEvidence?.httpSuccess ?? '',
+      execution?.serviceEvidence?.contentLanguage ?? '',
+      execution?.serviceEvidence?.htmlLanguage ?? '',
+    ].map(csvCell).join(',')).join('\r\n')}\r\n`;
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(

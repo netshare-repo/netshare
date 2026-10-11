@@ -3,6 +3,8 @@ import RoutingSession from '../models/RoutingSession.js';
 import { handleTaskFailure } from './secureTaskRoutingService.js';
 import { enqueueTask } from './taskQueueService.js';
 import logger from '../lib/logger.js';
+import config from '../config/env.js';
+import { supportsMongoTransactions } from '../lib/mongoTransaction.js';
 
 // Mongo is the durable source of pending work, even when Redis or the process
 // disappears. Never replay running HTTP traffic: expired work fails safely.
@@ -26,6 +28,21 @@ export const recoverPersistedTasks = async (now = new Date()) => {
 };
 
 export const startTaskRecovery = () => {
+  if (!supportsMongoTransactions()) {
+    const error = new Error(
+      'Persistent recovery requires MongoDB transactions. Configure a replica set or sharded cluster.'
+    );
+    if (config.isProduction) {
+      error.code = 'TRANSACTIONS_REQUIRED';
+      throw error;
+    }
+    logger.warn({
+      topology: mongooseTopology(),
+      transactionDependentApis: 'unavailable',
+    }, 'Persistent task recovery disabled in standalone development mode');
+    return () => {};
+  }
+
   let running = false;
   const tick = async () => {
     if (running) return;
@@ -38,4 +55,9 @@ export const startTaskRecovery = () => {
   timer.unref();
   void tick();
   return () => clearInterval(timer);
+};
+
+const mongooseTopology = () => {
+  const type = TestingTask.db?.client?.topology?.description?.type;
+  return type || 'unknown';
 };

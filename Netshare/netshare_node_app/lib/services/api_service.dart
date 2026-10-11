@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/api_constants.dart';
 
 class ApiService {
+  static const _timeout = Duration(seconds: 20);
+
   static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('token');
@@ -20,9 +23,7 @@ class ApiService {
   }
 
   static Future<Map<String, String>> _headers({bool auth = false}) async {
-    final headers = {
-      'Content-Type': 'application/json',
-    };
+    final headers = {'Content-Type': 'application/json'};
 
     if (auth) {
       final token = await getToken();
@@ -34,13 +35,16 @@ class ApiService {
     return headers;
   }
 
-  static Future<Map<String, dynamic>> get(String endpoint, {bool auth = false}) async {
-    final response = await http.get(
-      Uri.parse(ApiConstants.baseUrl + endpoint),
-      headers: await _headers(auth: auth),
-    ).timeout(const Duration(seconds: 20));
-
-    return _handleResponse(response);
+  static Future<Map<String, dynamic>> get(
+    String endpoint, {
+    bool auth = false,
+  }) async {
+    return _request(
+      http.get(
+        Uri.parse(ApiConstants.baseUrl + endpoint),
+        headers: await _headers(auth: auth),
+      ),
+    );
   }
 
   static Future<Map<String, dynamic>> post(
@@ -48,13 +52,13 @@ class ApiService {
     Map<String, dynamic> body, {
     bool auth = false,
   }) async {
-    final response = await http.post(
-      Uri.parse(ApiConstants.baseUrl + endpoint),
-      headers: await _headers(auth: auth),
-      body: jsonEncode(body),
-    ).timeout(const Duration(seconds: 20));
-
-    return _handleResponse(response);
+    return _request(
+      http.post(
+        Uri.parse(ApiConstants.baseUrl + endpoint),
+        headers: await _headers(auth: auth),
+        body: jsonEncode(body),
+      ),
+    );
   }
 
   static Future<Map<String, dynamic>> put(
@@ -62,24 +66,51 @@ class ApiService {
     Map<String, dynamic> body, {
     bool auth = false,
   }) async {
-    final response = await http.put(
-      Uri.parse(ApiConstants.baseUrl + endpoint),
-      headers: await _headers(auth: auth),
-      body: jsonEncode(body),
-    ).timeout(const Duration(seconds: 20));
+    return _request(
+      http.put(
+        Uri.parse(ApiConstants.baseUrl + endpoint),
+        headers: await _headers(auth: auth),
+        body: jsonEncode(body),
+      ),
+    );
+  }
 
-    return _handleResponse(response);
+  static Future<Map<String, dynamic>> _request(
+    Future<http.Response> request,
+  ) async {
+    try {
+      return _handleResponse(await request.timeout(_timeout));
+    } on TimeoutException {
+      throw Exception(
+        'Cannot reach the NetShare backend at ${ApiConstants.baseUrl}. '
+        'Check the development endpoint and network connection.',
+      );
+    } on http.ClientException {
+      throw Exception(
+        'Cannot reach the NetShare backend at ${ApiConstants.baseUrl}. '
+        'Check the development endpoint and network connection.',
+      );
+    }
   }
 
   static Map<String, dynamic> _handleResponse(http.Response response) {
     Map<String, dynamic> data;
-    try { data = response.body.isNotEmpty ? jsonDecode(response.body) as Map<String, dynamic> : {}; }
-    catch (_) { throw Exception('Invalid server response (${response.statusCode})'); }
+    try {
+      data = response.body.isNotEmpty
+          ? jsonDecode(response.body) as Map<String, dynamic>
+          : {};
+    } catch (_) {
+      throw Exception('Invalid server response (${response.statusCode})');
+    }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return data;
     }
 
-    throw Exception(data['message'] ?? (data['error'] is Map ? data['error']['message'] : null) ?? 'Request failed (${response.statusCode})');
+    throw Exception(
+      data['message'] ??
+          (data['error'] is Map ? data['error']['message'] : null) ??
+          'Request failed (${response.statusCode})',
+    );
   }
 }

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import '../core/theme/app_theme.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/user_service.dart';
+import '../services/mobile_document_service.dart';
+import '../services/api_service.dart';
+import 'role_home_screen.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
 import 'login_screen.dart';
@@ -18,6 +22,96 @@ class _ProfileScreenState extends State<ProfileScreen> {
   UserModel? user;
   bool isLoading = true;
   bool isSaving = false;
+  Map<String, dynamic>? photo;
+
+  Future<void> changeRole() async {
+    var selected = user?.role ?? 'both';
+    final password = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, update) => AlertDialog(
+          title: const Text('Change account role'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Stop participation and finish active tasks first. This changes account permissions.',
+              ),
+              DropdownButton<String>(
+                value: selected,
+                items: const [
+                  DropdownMenuItem(
+                    value: 'node_participant',
+                    child: Text('Node Participant'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'platform_client',
+                    child: Text('Platform Client'),
+                  ),
+                  DropdownMenuItem(value: 'both', child: Text('Both')),
+                ],
+                onChanged: (value) => update(() => selected = value!),
+              ),
+              TextField(
+                controller: password,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Current password',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Confirm change'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final currentPassword = password.text;
+    if (confirmed != true || !mounted) return;
+    setState(() => isSaving = true);
+    try {
+      await ApiService.put('/users/role', {
+        'role': selected,
+        'password': currentPassword,
+        'confirm': true,
+      }, auth: true);
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const RoleHomeScreen()),
+        (_) => false,
+      );
+    } catch (error) {
+      showMessage('$error');
+    } finally {
+      if (mounted) setState(() => isSaving = false);
+    }
+  }
+
+  Future<void> pickPhoto() async {
+    try {
+      final file = await MobileDocumentService.pickProof();
+      if (!mounted || file == null) return;
+      if (!['image/png', 'image/jpeg'].contains(file['mime'])) {
+        showMessage('Select a PNG or JPEG photo, maximum 2 MB.');
+        return;
+      }
+      setState(
+        () => photo = {'mimeType': file['mime'], 'base64': file['base64']},
+      );
+    } catch (error) {
+      showMessage('Could not select photo: $error');
+    }
+  }
 
   final nameController = TextEditingController();
   final phoneController = TextEditingController();
@@ -56,11 +150,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final data = await UserService.updateProfile(
         name: nameController.text.trim(),
         phone: phoneController.text.trim(),
+        photo: photo,
       );
 
       user = UserModel.fromJson(data['user']);
 
       if (!mounted) return;
+      photo = null;
       showMessage('Profile updated successfully');
       setState(() {});
     } catch (e) {
@@ -93,9 +189,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void showMessage(String message) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void showChangePasswordDialog() {
@@ -156,9 +252,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       : () async {
                           final oldPw = oldPasswordController.text.trim();
                           final newPw = newPasswordController.text.trim();
-                          final confirmPw = confirmPasswordController.text.trim();
+                          final confirmPw = confirmPasswordController.text
+                              .trim();
 
-                          if (oldPw.isEmpty || newPw.isEmpty || confirmPw.isEmpty) {
+                          if (oldPw.isEmpty ||
+                              newPw.isEmpty ||
+                              confirmPw.isEmpty) {
                             showMessage('All fields are required');
                             return;
                           }
@@ -169,7 +268,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           }
 
                           if (newPw.length < 8) {
-                            showMessage('New password must be at least 8 characters');
+                            showMessage(
+                              'New password must be at least 8 characters',
+                            );
                             return;
                           }
 
@@ -184,7 +285,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             Navigator.pop(context);
                             showMessage('Password changed successfully');
                           } catch (e) {
-                            showMessage(e.toString().replaceAll('Exception:', '').trim());
+                            showMessage(
+                              e.toString().replaceAll('Exception:', '').trim(),
+                            );
                           } finally {
                             if (mounted) {
                               setStateDialog(() => isChanging = false);
@@ -284,188 +387,214 @@ class _ProfileScreenState extends State<ProfileScreen> {
           style: TextStyle(fontWeight: FontWeight.w900),
         ),
         actions: [
-          IconButton(
-            onPressed: loadProfile,
-            icon: const Icon(Icons.refresh),
-          ),
+          IconButton(onPressed: loadProfile, icon: const Icon(Icons.refresh)),
         ],
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : currentUser == null
-              ? const Center(
-                  child: Text(
-                    'Profile not found',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: loadProfile,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(22),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryBlue,
-                            borderRadius: BorderRadius.circular(26),
-                          ),
-                          child: Column(
-                            children: [
-                              const CircleAvatar(
-                                radius: 45,
-                                backgroundColor: Colors.white,
-                                child: Icon(
-                                  Icons.person_rounded,
-                                  size: 50,
-                                  color: AppColors.primaryBlue,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              Text(
-                                currentUser.name,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                currentUser.email,
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 7,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.18),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  cleanRole(currentUser.role),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
+          ? const Center(
+              child: Text(
+                'Profile not found',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: loadProfile,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(22),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryBlue,
+                        borderRadius: BorderRadius.circular(26),
+                      ),
+                      child: Column(
+                        children: [
+                          CircleAvatar(
+                            radius: 45,
+                            backgroundColor: Colors.white,
+                            child:
+                                currentUser.profileImage.startsWith(
+                                  'data:image/',
+                                )
+                                ? ClipOval(
+                                    child: Image.memory(
+                                      base64Decode(
+                                        currentUser.profileImage
+                                            .split(',')
+                                            .last,
+                                      ),
+                                      width: 90,
+                                      height: 90,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, _, _) =>
+                                          const Icon(Icons.person_rounded),
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.person_rounded,
+                                    size: 50,
+                                    color: AppColors.primaryBlue,
                                   ),
-                                ),
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            currentUser.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            currentUser.email,
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              cleanRole(currentUser.role),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-
-                        const SizedBox(height: 22),
-
-                        const Text(
-                          'Account Information',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        infoBox(
-                          icon: Icons.email_outlined,
-                          title: 'Email Address',
-                          value: currentUser.email,
-                        ),
-                        infoBox(
-                          icon: Icons.phone_outlined,
-                          title: 'Phone Number',
-                          value: currentUser.phone,
-                          color: Colors.green,
-                        ),
-                        infoBox(
-                          icon: Icons.verified_user_outlined,
-                          title: 'Account Status',
-                          value: currentUser.status.toUpperCase(),
-                          color: currentUser.status == 'active'
-                              ? AppColors.successGreen
-                              : AppColors.dangerRed,
-                        ),
-                        infoBox(
-                          icon: Icons.verified_rounded,
-                          title: 'Verification',
-                          value: currentUser.isVerified
-                              ? 'Verified'
-                              : 'Not Verified',
-                          color: Colors.orange,
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        const Text(
-                          'Update Profile',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        CustomTextField(
-                          controller: nameController,
-                          label: 'Full Name',
-                          hint: 'Enter your name',
-                          icon: Icons.person_outline,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: phoneController,
-                          label: 'Phone Number',
-                          hint: 'Enter phone number',
-                          icon: Icons.phone_outlined,
-                          keyboardType: TextInputType.phone,
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        CustomButton(
-                          text: 'Save Changes',
-                          isLoading: isSaving,
-                          onPressed: updateProfile,
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        const Text(
-                          'Security',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        
-                        CustomButton(
-                          text: 'Change Password',
-                          backgroundColor: AppColors.darkNavy,
-                          onPressed: () => showChangePasswordDialog(),
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        CustomButton(
-                          text: 'Logout',
-                          backgroundColor: AppColors.dangerRed,
-                          onPressed: logout,
-                        ),
-
-                        const SizedBox(height: 30),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
+
+                    const SizedBox(height: 22),
+
+                    const Text(
+                      'Account Information',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    infoBox(
+                      icon: Icons.email_outlined,
+                      title: 'Email Address',
+                      value: currentUser.email,
+                    ),
+                    infoBox(
+                      icon: Icons.phone_outlined,
+                      title: 'Phone Number',
+                      value: currentUser.phone,
+                      color: Colors.green,
+                    ),
+                    infoBox(
+                      icon: Icons.verified_user_outlined,
+                      title: 'Account Status',
+                      value: currentUser.status.toUpperCase(),
+                      color: currentUser.status == 'active'
+                          ? AppColors.successGreen
+                          : AppColors.dangerRed,
+                    ),
+                    infoBox(
+                      icon: Icons.verified_rounded,
+                      title: 'Verification',
+                      value: currentUser.isVerified
+                          ? 'Verified'
+                          : 'Not Verified',
+                      color: Colors.orange,
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    const Text(
+                      'Update Profile',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    CustomTextField(
+                      controller: nameController,
+                      label: 'Full Name',
+                      hint: 'Enter your name',
+                      icon: Icons.person_outline,
+                    ),
+                    const SizedBox(height: 16),
+                    CustomTextField(
+                      controller: phoneController,
+                      label: 'Phone Number',
+                      hint: 'Enter phone number',
+                      icon: Icons.phone_outlined,
+                      keyboardType: TextInputType.phone,
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    CustomButton(
+                      text: 'Save Changes',
+                      isLoading: isSaving,
+                      onPressed: updateProfile,
+                    ),
+                    TextButton(
+                      onPressed: isSaving ? null : changeRole,
+                      child: const Text('Change account role'),
+                    ),
+                    TextButton.icon(
+                      onPressed: isSaving ? null : pickPhoto,
+                      icon: const Icon(Icons.add_a_photo),
+                      label: Text(
+                        photo == null
+                            ? 'Select profile photo (PNG/JPEG, max 2 MB)'
+                            : 'Photo selected — save changes',
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    const Text(
+                      'Security',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    CustomButton(
+                      text: 'Change Password',
+                      backgroundColor: AppColors.darkNavy,
+                      onPressed: () => showChangePasswordDialog(),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    CustomButton(
+                      text: 'Logout',
+                      backgroundColor: AppColors.dangerRed,
+                      onPressed: logout,
+                    ),
+
+                    const SizedBox(height: 30),
+                  ],
                 ),
+              ),
+            ),
     );
   }
 }

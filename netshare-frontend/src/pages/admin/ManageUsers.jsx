@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Search, RefreshCw, ShieldBan, ShieldCheck } from "lucide-react";
 import AdminLayout from "../../layouts/AdminLayout";
-import { getAdminUsers, blockUser, unblockUser } from "../../api/adminApi";
+import { getAdminUsers, getAdminUserDetails, restrictUser, blockUser, unblockUser } from "../../api/adminApi";
 import "./ManageUsers.css";
 
 function ManageUsers() {
@@ -9,6 +9,22 @@ function ManageUsers() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState("");
   const [message, setMessage] = useState("");
+  const [details, setDetails] = useState(null);
+  const showDetails = async (id) => {
+    setDetails(null);
+    setUpdatingId(id);
+    try { setDetails(await getAdminUserDetails(id)); }
+    catch (error) { setMessage(error.response?.data?.message || 'Failed to load user details'); }
+    finally { setUpdatingId(''); }
+  };
+  const handleRestrict = async (id) => {
+    const note = window.prompt('Reason for restricting this account to read-only access:');
+    if (!note) return;
+    setUpdatingId(id);
+    try { await restrictUser(id, note); await loadUsers(); setMessage('Account restricted.'); }
+    catch (error) { setMessage(error.response?.data?.message || 'Restriction failed'); }
+    finally { setUpdatingId(''); }
+  };
   
   const [filters, setFilters] = useState({
     search: "",
@@ -107,6 +123,7 @@ function ManageUsers() {
             <option value="">All Statuses</option>
             <option value="active">Active</option>
             <option value="blocked">Blocked</option>
+            <option value="restricted">Restricted (read-only)</option>
           </select>
 
           <select name="isVerified" value={filters.isVerified} onChange={handleFilterChange}>
@@ -117,6 +134,22 @@ function ManageUsers() {
         </div>
 
         {message && <div className="mu-message">{message}</div>}
+        {details && <section aria-label="User details" className="mu-message">
+          <button onClick={() => setDetails(null)}>Close details</button>
+          <h3>{details.user.name}</h3>
+          <p>{details.user.email} · {details.user.phone} · {details.user.role} · {details.user.status}</p>
+          <p>Joined: {new Date(details.user.createdAt).toLocaleString()} · Verified: {details.user.isVerified ? 'Yes' : 'No'}</p>
+          <p>Wallet balance: {details.wallet?.balance ?? 'Not created'} · Earned: {details.wallet?.earnedCredits ?? 0}</p>
+          <h4>Nodes (up to 100)</h4>
+          {!details.nodes.length && <p>No registered nodes.</p>}
+          {details.nodes.map(node => <p key={node._id}>{node.deviceName} · {node.region} · {node.status} · {node.usedBandwidthMB} MB</p>)}
+          <h4>Latest tasks (up to 50)</h4>
+          {!details.tasks.length && <p>No tasks.</p>}
+          {details.tasks.map(task => <p key={task._id}>{task.targetUrl} · {task.status}</p>)}
+          <h4>Latest account audit (up to 50)</h4>
+          {!details.audit.length && <p>No account actions.</p>}
+          {details.audit.map(log => <p key={log._id}>{log.action} · {log.details} · {new Date(log.createdAt).toLocaleString()}</p>)}
+        </section>}
 
         {loading ? (
           <div className="mu-empty">Loading users...</div>
@@ -149,6 +182,11 @@ function ManageUsers() {
                     <td>{u.isVerified ? "Yes" : "No"}</td>
                     <td>
                       <button 
+                        disabled={updatingId === u._id} onClick={() => showDetails(u._id)}
+                      >Details</button>
+                      {u.status === 'active' && u.role !== 'admin' && <button disabled={updatingId === u._id}
+                        onClick={() => handleRestrict(u._id)}>Restrict</button>}
+                      <button
                         className="mu-action-btn"
                         disabled={updatingId === u._id || u.role === 'admin'} // don't block other admins simply
                         onClick={() => handleBlock(u._id, u.status)}

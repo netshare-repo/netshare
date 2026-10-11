@@ -9,6 +9,7 @@ class AuthService {
     required String phone,
     required String password,
     String role = 'node_participant',
+    String verificationMethod = 'email',
   }) async {
     final data = await ApiService.post(ApiConstants.register, {
       'name': name,
@@ -16,7 +17,11 @@ class AuthService {
       'phone': phone,
       'password': password,
       'role': role,
+      'verificationMethod': verificationMethod,
     });
+    if (data['token'] != null) {
+      await ApiService.saveToken(data['token']);
+    }
     return data;
   }
 
@@ -63,9 +68,7 @@ class AuthService {
   static Future<Map<String, dynamic>> forgotPassword({
     required String email,
   }) async {
-    return await ApiService.post(ApiConstants.forgotPassword, {
-      'email': email,
-    });
+    return await ApiService.post(ApiConstants.forgotPassword, {'email': email});
   }
 
   static Future<Map<String, dynamic>> verifyResetOtp({

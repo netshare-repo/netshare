@@ -38,9 +38,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => ResetPasswordScreen(email: email),
-        ),
+        MaterialPageRoute(builder: (_) => ResetPasswordScreen(email: email)),
       );
     } catch (e) {
       showMessage(e.toString().replaceAll('Exception:', '').trim());
@@ -50,17 +48,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   void showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Forgot Password'),
-      ),
+      appBar: AppBar(title: const Text('Forgot Password')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(22),
@@ -78,18 +74,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               const SizedBox(height: 8),
               const Text(
                 'Enter your email address to receive an OTP.',
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 15,
-                ),
+                style: TextStyle(color: AppColors.textMuted, fontSize: 15),
               ),
               const SizedBox(height: 32),
               CustomTextField(
                 controller: emailController,
-                label: 'Email',
-                hint: 'Enter your registered email',
+                label: 'Email or verified mobile',
+                hint: 'Registered email or +923001234567',
                 icon: Icons.email_outlined,
-                keyboardType: TextInputType.emailAddress,
+                keyboardType: TextInputType.text,
               ),
               const SizedBox(height: 28),
               CustomButton(

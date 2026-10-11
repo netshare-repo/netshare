@@ -1,45 +1,49 @@
-# Requirements Traceability — Phase 8 authoritative register
+# Requirements Traceability — Phase 9 authoritative register
 
-Updated: 2026-10-08. Source: `docs/NETSHARE_SRS.md` §3.1 official numbered FR tables and `docs/NETSHARE_CHAPTER_3.md`. The SRS contains **84** functional requirements. The former 64-row audit omitted 20 requirements and is superseded, not a valid completion denominator.
+## Phase 10A scope update (2026-10-11)
 
-**64/84 DONE (76.19%); 20/84 PARTIAL; release acceptance NOT READY.** DONE means implemented with repository/API/unit/integration evidence, not certified device/browser production E2E. PARTIAL includes missing requirement constraints, missing required mobile surfaces and blocked physical-device acceptance. Phase completion is not synonymous with full SRS compliance. Tests are explicit fixtures unless the production-process acceptance harness states otherwise.
+FR7.2 now exposes only implemented GET-based accessibility, performance and localization observations; ad, UX and compliance are explicitly unsupported pending test contracts. FR8.1–FR8.4 now have persisted per-execution `TaskResult` records shown in React/Flutter details and CSV, including failure reports. This improves implementation evidence but does not change the historical 84-row totals or certify physical Android egress. See [Phase 10A audit](PHASE10A_REAL_TASK_RESULTS.md).
+
+Updated: 2026-10-09. Source: `docs/NETSHARE_SRS.md` §3.1 official numbered FR tables and `docs/NETSHARE_CHAPTER_3.md`. The SRS contains **84** functional requirements. The former 64-row audit omitted 20 requirements and is superseded, not a valid completion denominator.
+
+**73/84 DONE (86.90%); 11/84 PARTIAL; 0/84 NOT_DONE; release acceptance NOT READY.** DONE means implemented with repository/API/unit/integration evidence, not certified device/browser production E2E. PARTIAL includes missing requirement constraints, missing required mobile surfaces and blocked physical-device acceptance. Phase completion is not synonymous with full SRS compliance. Tests are explicit fixtures unless the production-process acceptance harness states otherwise.
 
 Paths below are relative to their backend/frontend/mobile source roots. Full validation scope and limitations: [release report](RELEASE_CANDIDATE_REPORT.md). Strict NFRs are audited separately in [NFR audit](NFR_AUDIT.md).
 
 | Official ID | SRS requirement | Status | Actual code/test evidence or remaining gap |
 |---|---|---|---|
-| FR1.1 | User Registration | PARTIAL | Email registration works; email-only schema prevents phone-only registration and phone uniqueness is not enforced. |
+| FR1.1 | User Registration | PARTIAL | Phone-only registration and canonical E.164 uniqueness implemented; replacement partial unique indexes preserve multiple phone-only users. phase9Identity tests cover concurrent registration/verification. Real SMS delivery is UNVERIFIED. |
 | FR1.2 | Password Entry | DONE | authController/authRoutes; phase0 + phase8 OTP/auth tests; rcValidation SMTP/register/login |
 | FR1.3 | Role Selection | DONE | authController/authRoutes; phase0 + phase8 OTP/auth tests; rcValidation SMTP/register/login |
-| FR1.4 | Verification Method Selection | PARTIAL | Email OTP works; no selectable SMS/alternative verification channel. |
+| FR1.4 | Verification Method Selection | PARTIAL | Web/Flutter email/SMS choice, OTP verification/resend/login/reset and bounded Twilio adapter implemented. Provider rejection/timeout fail closed; tests use explicit transport fixtures, not live handset delivery. |
 | FR1.5 | Register Action | DONE | authController/authRoutes; phase0 + phase8 OTP/auth tests; rcValidation SMTP/register/login |
 | FR1.6 | Login Action | DONE | authController/authRoutes; phase0 + phase8 OTP/auth tests; rcValidation SMTP/register/login |
 | FR2.1 | View Profile | DONE | userController; web/mobile Profile; phase8 password/ownership tests |
 | FR2.2 | Update Basic Information | DONE | userController; web/mobile Profile; phase8 password/ownership tests |
-| FR2.3 | Upload Profile Photo | PARTIAL | Profile image string can change; supported-format upload validation/storage is absent. |
+| FR2.3 | Upload Profile Photo | DONE | Owner-only PNG/JPEG upload, canonical base64/signature and 2 MB validation; inline storage and web/Flutter picker/preview. phase9 backend and Flutter profile tests. |
 | FR2.4 | View Active Role | DONE | userController; web/mobile Profile; phase8 password/ownership tests |
-| FR2.5 | Update Role | PARTIAL | Both-role workspace switching works; persisted account role change workflow is absent. |
+| FR2.5 | Update Role | DONE | Confirmed password-protected persisted role change with transaction, active-work guard, audit and socket disconnect. Web/Flutter profile workflow; phase9 role/authorization tests. |
 | FR2.6 | Participation Preference Setting | DONE | userController; web/mobile Profile; phase8 password/ownership tests |
 | FR2.7 | Change Security Settings | DONE | userController; web/mobile Profile; phase8 password/ownership tests |
-| FR3.1 | View Participation Status | PARTIAL | Persisted participation status exists; correlation with actual Android VPN/device activity is BLOCKED. |
-| FR3.2 | Set Bandwidth Limit | PARTIAL | Allocation/settlement enforce stored remaining allowance; daily reset and strict in-flight daily cap are not complete. |
-| FR3.3 | Set Speed Cap | PARTIAL | Speed-cap settings are stored; packet-level upload/download throttling is not implemented. |
+| FR3.1 | View Participation Status | PARTIAL | Persisted participation plus native VPN state are displayed; start failure resets mobile state. Device/VPN correlation remains BLOCKED without Android hardware/AVD. |
+| FR3.2 | Set Bandwidth Limit | PARTIAL | UTC budget rollover waits for idle node; immutable task policy and persisted fail-closed TUN-byte quota with conservative 64 KiB crash reservation implemented. Backend/JUnit tests pass; actual Android quota/restart acceptance BLOCKED. |
+| FR3.3 | Set Speed Cap | PARTIAL | Validated directional speed settings and native aggregate byte pacing implemented; active-task policy edits rejected atomically. Kotlin timing/concurrency fixtures pass; real-device throughput enforcement BLOCKED. |
 | FR3.4 | Set Concurrent Task Limit | DONE | nodeController/nodeHealth/allocationClaimService; phase1 + phase8; Flutter node screens |
-| FR3.5 | Start Participation | PARTIAL | Authenticated start and device-session consent are enforced; real Android start/VPN validation is BLOCKED. |
-| FR3.6 | Stop Participation | PARTIAL | Backend drain/stop is tested; real Android shutdown/background behavior is BLOCKED. |
-| FR3.7 | View Live Activity | PARTIAL | Recorded bandwidth/capacity/health exist; measured live speed and complete device metrics remain incomplete. |
+| FR3.5 | Start Participation | PARTIAL | Authenticated consent/start and failure cleanup implemented. A process-wide VPN lease prevents a second route from stealing the active tunnel. Real Android start/VPN validation BLOCKED. |
+| FR3.6 | Stop Participation | PARTIAL | Backend drain/stop, native worker interruption/join and owned VPN cleanup implemented/tested at code level; real background/screen-lock shutdown BLOCKED. |
+| FR3.7 | View Live Activity | PARTIAL | Flutter live activity polls native TUN byte-counter deltas and backend session/health/bandwidth, with errors/unmeasured states. Widget tests pass; actual device metric correlation BLOCKED. |
 | FR3.8 | View Credits Earned | DONE | nodeController/nodeHealth/allocationClaimService; phase1 + phase8; Flutter node screens |
 | FR4.1 | View Session Metrics | DONE | sessionController/ParticipationSession/taskSettlementService; phase1 + phase8; NodeSession |
-| FR4.2 | View Connection Metrics | PARTIAL | Measured HTTP latency/status exists; packet loss is explicitly unmeasured, not fabricated. |
-| FR4.3 | View Session Details | PARTIAL | Session ID/region exist; measured current transfer speed is incomplete. |
+| FR4.2 | View Connection Metrics | PARTIAL | Bounded authenticated-offer STUN binding probes calculate RTT, response-timeout loss and adjacent-sample jitter; stale/unavailable samples remain null. Four protocol/calculation tests pass; live Android/network evidence UNVERIFIED. Not general HTTP packet loss. |
+| FR4.3 | View Session Details | PARTIAL | Session IDs/region, native measured upload/download counter deltas and diagnostic provenance exposed in Flutter/web. Code/widget evidence only; real-device speed/session correlation BLOCKED. |
 | FR4.4 | Pause Session | DONE | sessionController/ParticipationSession/taskSettlementService; phase1 + phase8; NodeSession |
-| FR4.5 | Terminate Session | PARTIAL | Backend termination is tested; real Android resources/VPN revoke behavior is BLOCKED. |
+| FR4.5 | Terminate Session | PARTIAL | Backend termination, route-owned native resource cleanup and duplicate-close guards tested; actual VPN revoke/network switch/device lifecycle BLOCKED. |
 | FR5.1 | View Wallet Balance | DONE | walletService/paymentService; phase5 + phase8; web NodeWallet and Flutter Wallet |
 | FR5.2 | View Earnings Summary | DONE | walletService/paymentService; phase5 + phase8; web NodeWallet and Flutter Wallet |
 | FR5.3 | View Transaction History | DONE | walletService/paymentService; phase5 + phase8; web NodeWallet and Flutter Wallet |
-| FR5.4 | Submit Withdrawal Request | PARTIAL | Authorized withdrawal API/web flow passes; Node Participant Flutter withdrawal UI is absent. |
-| FR5.5 | Select Withdrawal Channel | PARTIAL | Supported channel validation/web selection passes; Flutter node-wallet selection is absent. |
-| FR5.6 | Enter Withdrawal Details | PARTIAL | Validated owned account details/web submission pass; Flutter node-wallet withdrawal details are absent. |
+| FR5.4 | Submit Withdrawal Request | DONE | Flutter node-wallet withdrawal submission/history, balance checks and stable retry key use existing transactional API. Backend concurrent idempotency and Flutter wallet/authorization tests pass. |
+| FR5.5 | Select Withdrawal Channel | DONE | Flutter bank/easypaisa/jazzcash selection uses existing server-supported channels; phase9 Flutter withdrawal tests. |
+| FR5.6 | Enter Withdrawal Details | DONE | Flutter amount/account validation and API error/status handling; owned server-side details, reserved balance and idempotency payload binding tested. |
 | FR6.1 | View Active Tasks | DONE | Flutter client_dashboard_screen/client_tasks_screen/client_wallet_screen; client_role_test |
 | FR6.2 | View Completed Tasks | DONE | Flutter client_dashboard_screen/client_tasks_screen/client_wallet_screen; client_role_test |
 | FR6.3 | View Credit Usage | DONE | Flutter client_dashboard_screen/client_tasks_screen/client_wallet_screen; client_role_test |
@@ -76,14 +80,14 @@ Paths below are relative to their backend/frontend/mobile source roots. Full val
 | FR11.5 | View Order Status | DONE | marketplaceController/orderStatusService; phase6 + phase8; production fulfilment/notification smoke |
 | FR12.1 | View Total Users | DONE | adminController/operationsController; phase6; admin dashboard/Operations |
 | FR12.2 | View Active Tasks | DONE | adminController/operationsController; phase6; admin dashboard/Operations |
-| FR12.3 | View Bandwidth Usage | PARTIAL | Usage reports exist; aggregate bandwidth KPI on the primary admin dashboard is absent. |
-| FR12.4 | View Network Performance | PARTIAL | Node records/health monitoring exist; complete current network/performance dashboard indicators are incomplete. |
+| FR12.3 | View Bandwidth Usage | DONE | Primary admin dashboard exposes actual aggregate BandwidthUsage totals and directional breakdown; admin-only API/UI and phase9 assertions. |
+| FR12.4 | View Network Performance | DONE | Primary dashboard shows fresh-node count, measured latency, stored reliability, capacity/load and sample timestamp; null is unmeasured. phase9 dashboard tests. |
 | FR12.5 | View Suspicious Activity Alerts | DONE | adminController/operationsController; phase6; admin dashboard/Operations |
 | FR12.6 | View User Management Summary | DONE | adminController/operationsController; phase6; admin dashboard/Operations |
 | FR13.1 | View User List | DONE | adminController/adminRoutes; phase0/phase6 authorization; ManageUsers |
 | FR13.2 | View Node Records | DONE | adminController/adminRoutes; phase0/phase6 authorization; ManageUsers |
-| FR13.3 | View User Details | PARTIAL | Admin lists exist; individual-user detailed record workflow is absent. |
-| FR13.4 | Restrict User | PARTIAL | Audited blocking exists; distinct restricted-account state/workflow is absent. |
+| FR13.3 | View User Details | DONE | Admin-only detailed user/wallet/node/recent-task/audit view with validated IDs and credential/API-key/OTP redaction; phase9 access and redaction tests. |
+| FR13.4 | Restrict User | DONE | Audited idempotent read-only restriction separate from blocking; writes/socket admission/allocation denied, reads allowed; transaction and role race guards. phase9 authorization/idempotency tests. |
 | FR13.5 | Block User | DONE | adminController/adminRoutes; phase0/phase6 authorization; ManageUsers |
 | FR14.1 | View Pending Payments | DONE | operationsController/paymentService/reportService; phase5/phase6/phase8; production admin smoke |
 | FR14.2 | Verify Payments | DONE | operationsController/paymentService/reportService; phase5/phase6/phase8; production admin smoke |

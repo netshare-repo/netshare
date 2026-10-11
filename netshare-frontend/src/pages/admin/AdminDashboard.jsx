@@ -99,6 +99,8 @@ function AdminDashboard() {
         .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
 
       setStats({
+        bandwidth: dashboardData?.bandwidth,
+        network: dashboardData?.network,
         totalUsers:
           dashboardData?.totalUsers ??
           dashboardData?.stats?.totalUsers ??
@@ -166,6 +168,11 @@ function AdminDashboard() {
   }, {});
 
   const statCards = [
+    { title: 'Accounted bandwidth (MB)', value: stats.bandwidth?.totalMB?.toFixed(2) ?? 'Unavailable', icon: Activity, color: '#2563eb' },
+    { title: 'Nodes seen within 60 seconds', value: stats.network?.freshNodes ?? 'Unavailable', icon: Server, color: '#2563eb' },
+    { title: 'Measured mean HTTP latency (ms)', value: stats.network?.latencyMs?.toFixed(1) ?? 'Unmeasured', icon: Activity, color: '#2563eb' },
+    { title: 'Fresh-node reliability (%)', value: stats.network?.reliabilityPercent?.toFixed(1) ?? 'Unmeasured', icon: CheckCircle2, color: '#2563eb' },
+    { title: 'Fresh-node assignments / capacity', value: stats.network ? `${stats.network.activeAssignments} / ${stats.network.capacity}` : 'Unavailable', icon: ListChecks, color: '#2563eb' },
     {
       title: "Execution Plane Sockets",
       value: `${liveNodes.length} Live`,

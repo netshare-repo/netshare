@@ -46,6 +46,7 @@ const nodeDeviceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    bandwidthDay: { type: String, default: () => new Date().toISOString().slice(0, 10) },
 
     uploadSpeedCapMbps: {
       type: Number,

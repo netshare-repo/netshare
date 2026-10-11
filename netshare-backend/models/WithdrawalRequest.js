@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const withdrawalRequestSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+  requestKey: { type: String, unique: true, sparse: true },
   amount: { type: Number, required: true, min: 1 },
   method: { type: String, enum: ["bank_transfer", "easypaisa", "jazzcash"], required: true },
   accountDetails: { type: String, required: true, select: false },

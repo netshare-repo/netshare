@@ -79,6 +79,12 @@ export const validateTarget = async (targetUrl, options = {}) => {
   } catch {
     return { valid: false, reason: 'Malformed URL.' };
   }
+  if (parsed.username || parsed.password) {
+    return { valid: false, reason: 'Target URL must not contain credentials.' };
+  }
+  if ([...parsed.searchParams.keys()].some(key => /(?:token|api[_-]?key|password|secret|credential|signature|auth)/i.test(key))) {
+    return { valid: false, reason: 'Target URL must not contain credential-like query parameters.' };
+  }
   
   // 2. Protocol check — only http: and https:
   if (!['http:', 'https:'].includes(parsed.protocol)) {

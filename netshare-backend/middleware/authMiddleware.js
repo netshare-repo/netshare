@@ -34,6 +34,9 @@ export const protect = async (req, res, next) => {
     }
 
     if (!req.user.isVerified) return res.status(403).json({ message: 'Account verification required' });
+    if (req.user.status === 'restricted' && !['GET', 'HEAD'].includes(req.method)) {
+      return res.status(403).json({ message: 'Account restricted: read-only access. Contact support.' });
+    }
     next();
   } catch (error) {
     return res.status(401).json({

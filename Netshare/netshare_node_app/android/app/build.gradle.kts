@@ -24,6 +24,8 @@ android {
         applicationId = "com.example.netshare_node_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // API 21 probe fails: shared_preferences_android 2.4.23 requires 24;
+        // Flutter 3.41.9 itself supports API 24+. See Phase 9 release report.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -42,3 +44,5 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies { testImplementation("junit:junit:4.13.2") }

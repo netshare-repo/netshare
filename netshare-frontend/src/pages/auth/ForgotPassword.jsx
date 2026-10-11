@@ -59,10 +59,10 @@ function ForgotPassword() {
           {error && <div className="auth-error">{error}</div>}
           {message && <div style={{ color: 'var(--primary-color)', marginBottom: '15px' }}>{message}</div>}
 
-          <label>Email Address</label>
+          <label>Email or verified mobile number</label>
           <input
-            type="email"
-            placeholder="Enter your registered email"
+            type="text"
+            placeholder="Registered email or +923001234567"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required

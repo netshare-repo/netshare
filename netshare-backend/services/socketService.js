@@ -26,6 +26,12 @@ const connectedNodes = new Map();
 // Map<socketId, { type: 'node'|'client'|'admin', id: string, user: Object, node: Object }>
 const socketRegistry = new Map();
 
+export const disconnectAccountSockets = (userId) => {
+  for (const [socketId, meta] of socketRegistry) {
+    if (String(meta.user?._id) === String(userId)) ioInstance?.sockets.sockets.get(socketId)?.disconnect(true);
+  }
+};
+
 let ioInstance = null;
 let heartbeatCheckInterval = null;
 
@@ -57,7 +63,7 @@ export const authenticateSocketHandshake = async (socket, next) => {
       if (!node) {
         return next(new Error("Invalid Node API Key"));
       }
-      if (!node.userId?.isVerified || node.userId.status === 'blocked' ||
+      if (!node.userId?.isVerified || node.userId.status !== 'active' ||
         !['node_participant', 'both'].includes(node.userId.role)) {
         return next(new Error('Node account is not authorized'));
       }
@@ -79,7 +85,7 @@ export const authenticateSocketHandshake = async (socket, next) => {
         return next(new Error("Authenticated user not found"));
       }
 
-      if (user.status === "blocked") {
+      if (user.status !== "active") {
         return next(new Error("Account is blocked"));
       }
       if (!user.isVerified) return next(new Error('Account is not verified'));
@@ -248,7 +254,7 @@ export const receiveNodeTelemetry = async (nodeId, telemetryData) => {
       downloadBandwidthMB = 0,
       latency = null,
       latencyMs = null,
-      packetLoss = 0,
+      packetLoss = null,
       status = "active",
       networkStatus = {},
     } = telemetryData;
@@ -263,7 +269,7 @@ export const receiveNodeTelemetry = async (nodeId, telemetryData) => {
       memoryUsage: Number(memoryUsage),
       bandwidthUsed: currentBandwidth,
       latency: currentLatency,
-      packetLoss: Number(packetLoss),
+      packetLoss: packetLoss == null ? null : Number(packetLoss),
       onlineStatus: status || "online",
       timestamp: new Date(),
     });
@@ -586,9 +592,11 @@ export const initSocketServer = async (httpServer) => {
           memoryUsage: Number(memoryUsage),
           networkStatus: {
             latencyMs: networkStatus.latencyMs != null ? Number(networkStatus.latencyMs) : (networkStatus.latency != null ? Number(networkStatus.latency) : null),
-            uploadSpeedMbps: Number(networkStatus.uploadSpeedMbps || 0),
-            downloadSpeedMbps: Number(networkStatus.downloadSpeedMbps || 0),
-            packetLoss: Number(networkStatus.packetLoss || 0),
+            uploadSpeedMbps: networkStatus.uploadSpeedMbps == null ? null : Number(networkStatus.uploadSpeedMbps),
+            downloadSpeedMbps: networkStatus.downloadSpeedMbps == null ? null : Number(networkStatus.downloadSpeedMbps),
+            packetLoss: networkStatus.packetLoss == null ? null : Number(networkStatus.packetLoss),
+            packetLossSource: networkStatus.packetLossSource === 'stun_binding_response_timeout_400ms' ? networkStatus.packetLossSource : null,
+            stabilityJitterMs: Number.isFinite(networkStatus.stabilityJitterMs) ? networkStatus.stabilityJitterMs : null,
             ipAddress: socket.handshake.address || "",
           },
           timestamp: new Date(timestamp),
@@ -599,7 +607,7 @@ export const initSocketServer = async (httpServer) => {
           cpuUsage,
           memoryUsage,
           latency: networkStatus.latencyMs != null ? networkStatus.latencyMs : null,
-          packetLoss: networkStatus.packetLoss || 0,
+          packetLoss: networkStatus.packetLoss ?? null,
           status,
         });
 

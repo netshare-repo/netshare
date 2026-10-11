@@ -10,6 +10,7 @@ import ResetPassword from "../pages/auth/ResetPassword";
 import ClientDashboard from "../pages/client/ClientDashboard";
 import SubmitTask from "../pages/client/SubmitTask";
 import MyTasks from "../pages/client/MyTasks";
+import TaskDetails from "../pages/client/TaskDetails";
 import ClientWallet from "../pages/client/ClientWallet";
 import Marketplace from "../pages/client/Marketplace";
 import MyOrders from "../pages/client/MyOrders";
@@ -130,6 +131,10 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      <Route path="/client/tasks/:id" element={
+        <ProtectedRoute><RoleRoute allowedRoles={["platform_client", "both"]}><TaskDetails /></RoleRoute></ProtectedRoute>
+      } />
 
       <Route
         path="/client/wallet"

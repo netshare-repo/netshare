@@ -474,6 +474,73 @@ describe('Phase 2D: Real Controlled Task Routing', () => {
     expect(finalSession.status).toBe('completed');
   });
 
+  it('stores three measured execution records, strips unapproved preview data, and settles once', async () => {
+    const task = await TestingTask.create({
+      clientId: testClientUserId, targetUrl: 'https://example.com/check',
+      serviceType: 'performance_testing', targetRegion: 'us-east', executionLimit: 3,
+      estimatedCost: 30, status: 'assigned', assignedNodeId: testNodeDeviceId,
+    });
+    const { session } = await prepareAuthorizedTaskSession({ taskId: task._id,
+      clientId: testClientUserId, nodeId: testNodeDeviceId });
+    const records = [1, 2, 3].map(execution => ({
+      execution, success: true, statusCode: 200,
+      startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+      finalUrl: 'https://example.com/check', contentType: 'text/html',
+      latencyMs: execution * 10, responseSizeBytes: 100 + execution,
+      downloadBandwidthMB: 0.001, uploadBandwidthMB: 0.001,
+      preview: '<script>alert(1)</script>', headers: { authorization: 'secret' },
+    }));
+    const payload = { taskId: String(task._id), routingSessionId: String(session._id),
+      targetRegion: 'us-east', success: true, statusCode: 200, latencyMs: 20,
+      bandwidthUsedMB: 0.003, uploadBandwidthMB: 0.003, successRate: 100,
+      resultData: { schemaVersion: 2, requestedExecutions: 3, attemptedExecutions: 3,
+        completedExecutions: 3, totalDurationMs: 70, totalResponseSizeBytes: 306,
+        executions: records, preview: 'password=secret' } };
+    await expect(settleTaskResult(String(session._id), { ...payload, success: false }))
+      .rejects.toMatchObject({ code: 'INVALID_RESULT' });
+    expect(await TaskResult.countDocuments({ taskId: task._id })).toBe(0);
+    const before = (await Wallet.findOne({ userId: testNodeUserId })).balance;
+    const first = await settleTaskResult(String(session._id), payload);
+    const second = await settleTaskResult(String(session._id), payload);
+    expect(first.settled).toBe(true);
+    expect(second.settled).toBe(false);
+    const stored = await TaskResult.findOne({ taskId: task._id });
+    expect(stored.resultData.executions).toHaveLength(3);
+    expect(stored.resultData.executions[2].responseSizeBytes).toBe(103);
+    expect(stored.resultData.nodeRegion).toBeTruthy();
+    expect(JSON.stringify(stored.resultData)).not.toContain('password=secret');
+    expect(JSON.stringify(stored.resultData)).not.toContain('authorization');
+    expect((await Wallet.findOne({ userId: testNodeUserId })).balance).toBeGreaterThan(before);
+    await expect(settleTaskResult(String(session._id), { ...payload, routingSessionId: String(task._id) }))
+      .rejects.toMatchObject({ code: 'BINDING_MISMATCH' });
+  });
+
+  it('persists a failed request without inventing an HTTP status or rewarding the node', async () => {
+    const task = await TestingTask.create({ clientId: testClientUserId,
+      targetUrl: 'https://example.com/fail', serviceType: 'accessibility_testing',
+      targetRegion: 'us-east', executionLimit: 2, estimatedCost: 20,
+      status: 'assigned', assignedNodeId: testNodeDeviceId });
+    const { session } = await prepareAuthorizedTaskSession({ taskId: task._id,
+      clientId: testClientUserId, nodeId: testNodeDeviceId });
+    const before = (await Wallet.findOne({ userId: testNodeUserId })).balance;
+    const outcome = await settleTaskResult(String(session._id), {
+      taskId: String(task._id), routingSessionId: String(session._id),
+      success: false, statusCode: 0, latencyMs: 42, bandwidthUsedMB: 0,
+      successRate: 0, resultData: { schemaVersion: 2, requestedExecutions: 2,
+        attemptedExecutions: 1, completedExecutions: 0, totalDurationMs: 42,
+        error: 'Connection timed out for ?token=private', executions: [{ execution: 1,
+          success: false, statusCode: 0, latencyMs: 42,
+          error: 'Connection timed out for ?token=private', completedAt: new Date().toISOString() }] },
+    });
+    expect(outcome.settled).toBe(false);
+    const stored = await TaskResult.findOne({ taskId: task._id });
+    expect(stored.statusCode).toBe(0);
+    expect(stored.resultData.executions[0].error).toContain('token=[redacted]');
+    expect(JSON.stringify(stored.resultData)).not.toContain('private');
+    expect((await TestingTask.findById(task._id)).status).toBe('failed');
+    expect((await Wallet.findOne({ userId: testNodeUserId })).balance).toBe(before);
+  });
+
   // =========================================================================
   // T11: End-to-end dispatch over WebRTC DataChannel
   // =========================================================================

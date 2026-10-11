@@ -2,6 +2,9 @@ package com.example.netshare_node_app
 
 import android.app.Activity
 import android.content.Intent
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Build
 import android.util.Log
@@ -173,6 +176,7 @@ class MainActivity : FlutterActivity(), NetShareVpnService.VpnStateListener {
                     putExtra(NetShareVpnService.EXTRA_AUTHORIZED_PORT, authorizedPort)
                     putExtra(NetShareVpnService.EXTRA_AUTHORIZED_METHOD, authorizedMethod)
                     putStringArrayListExtra(NetShareVpnService.EXTRA_AUTHORIZED_IPS, ArrayList(authorizedIps))
+                    putExtra("traffic_policy", call.argument<String>("trafficPolicy"))
                 }
 
                 try {
@@ -221,6 +225,17 @@ class MainActivity : FlutterActivity(), NetShareVpnService.VpnStateListener {
                         "isRunning" to isRunning
                     )
                 )
+            }
+
+            "isVpnNetworkReady" -> {
+                val connectivity = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                @Suppress("DEPRECATION")
+                val ready = connectivity.allNetworks.any { network ->
+                    connectivity.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true &&
+                        connectivity.getNetworkInfo(network)?.isConnected == true &&
+                        connectivity.getLinkProperties(network)?.interfaceName == "tun0"
+                }
+                result.success(ready)
             }
 
             "getTunMetrics" -> {

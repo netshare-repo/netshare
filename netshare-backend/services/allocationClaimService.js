@@ -1,11 +1,14 @@
 import TestingTask from '../models/TestingTask.js';
 import NodeDevice from '../models/NodeDevice.js';
 import RoutingSession from '../models/RoutingSession.js';
+import User from '../models/User.js';
+import { refreshDailyBudgets } from './trafficPolicyService.js';
 import { runTransaction } from '../lib/mongoTransaction.js';
 import { HEALTH_CONFIG } from '../lib/nodeHealth.js';
 
 // The task claim and capacity reservation must survive/roll back together.
 export const claimTaskOnNode = async (taskId, nodeId, region) => {
+  await refreshDailyBudgets(nodeId);
   try {
     return await runTransaction(async session => {
       const task = await TestingTask.findOneAndUpdate({ _id: taskId, status: 'pending', assignedNodeId: null },
@@ -21,6 +24,9 @@ export const claimTaskOnNode = async (taskId, nodeId, region) => {
         status: { $cond: [{ $gte: [{ $add: ['$currentActiveTasks', 1] }, '$maxConcurrentTasks'] }, 'busy', 'active'] } } }],
       { new: true, session });
       if (!node) throw Object.assign(new Error('Node capacity unavailable'), { code: 'NO_CAPACITY' });
+      const owner = await User.findOneAndUpdate({ _id: node.userId, status: 'active', isVerified: true,
+        role: { $in: ['node_participant', 'both'] } }, { $inc: { authorizationVersion: 1 } }, { session });
+      if (!owner) throw Object.assign(new Error('Node owner not authorized'), { code: 'NO_CAPACITY' });
       return { task, node };
     });
   } catch (error) {

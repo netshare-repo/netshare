@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/services.dart';
 
 /// Represents the status of the Android VpnService.
@@ -119,6 +120,7 @@ class NetShareVpnBridge {
     int? authorizedPort,
     String authorizedMethod = 'GET',
     List<String> authorizedIps = const [],
+    Map<String, dynamic>? trafficPolicy,
   }) async {
     try {
       final Map<dynamic, dynamic>? result = await _channel
@@ -132,6 +134,9 @@ class NetShareVpnBridge {
             'authorizedPort': authorizedPort,
             'authorizedMethod': authorizedMethod,
             'authorizedIps': authorizedIps,
+            'trafficPolicy': trafficPolicy == null
+                ? null
+                : jsonEncode(trafficPolicy),
           });
       return Map<String, dynamic>.from(result ?? {});
     } on PlatformException catch (e) {
@@ -163,6 +168,15 @@ class NetShareVpnBridge {
         routingScope: '10.254.1.0/24',
         isRunning: false,
       );
+    }
+  }
+
+  /// Android may publish the VPN network after VpnService establishes the TUN.
+  static Future<bool> isNetworkReady() async {
+    try {
+      return await _channel.invokeMethod<bool>('isVpnNetworkReady') ?? false;
+    } on PlatformException catch (_) {
+      return false;
     }
   }
 

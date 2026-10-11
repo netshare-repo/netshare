@@ -9,30 +9,22 @@ class UserService {
   static Future<Map<String, dynamic>> updateProfile({
     required String name,
     required String phone,
-    String profileImage = '',
+    Map<String, dynamic>? photo,
   }) {
-    return ApiService.put(
-      ApiConstants.profile,
-      {
-        'name': name,
-        'phone': phone,
-        'profileImage': profileImage,
-      },
-      auth: true,
-    );
+    return ApiService.put(ApiConstants.profile, {
+      'name': name,
+      'phone': phone,
+      'photo': ?photo,
+    }, auth: true);
   }
 
   static Future<Map<String, dynamic>> changePassword({
     required String oldPassword,
     required String newPassword,
   }) {
-    return ApiService.put(
-      ApiConstants.changePassword,
-      {
-        'oldPassword': oldPassword,
-        'newPassword': newPassword,
-      },
-      auth: true,
-    );
+    return ApiService.put(ApiConstants.changePassword, {
+      'oldPassword': oldPassword,
+      'newPassword': newPassword,
+    }, auth: true);
   }
 }

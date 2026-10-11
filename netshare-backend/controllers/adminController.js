@@ -3,6 +3,11 @@ import NodeDevice from "../models/NodeDevice.js";
 import TestingTask from "../models/TestingTask.js";
 import CreditTransaction from "../models/CreditTransaction.js";
 import AdminLog from "../models/AdminLog.js";
+import BandwidthUsage from '../models/BandwidthUsage.js';
+import Wallet from '../models/Wallet.js';
+import mongoose from 'mongoose';
+import { publicUser } from '../utils/publicUser.js';
+import { restrictAccount } from '../services/accountControlService.js';
 
 export const getAdminDashboard = async (req, res) => {
   try {
@@ -29,7 +34,20 @@ export const getAdminDashboard = async (req, res) => {
       0
     );
 
+    const [usage] = await BandwidthUsage.aggregate([{ $group: { _id: null,
+      totalMB: { $sum: '$totalBandwidthMB' }, uploadMB: { $sum: '$uploadBandwidthMB' },
+      downloadMB: { $sum: '$downloadBandwidthMB' } } }]);
+    const sampledAt = new Date();
+    const [network] = await NodeDevice.aggregate([
+      { $match: { status: { $in: ['active', 'busy'] }, lastSeenAt: { $gte: new Date(sampledAt - 60000) } } },
+      { $group: { _id: null, freshNodes: { $sum: 1 }, latencyMs: { $avg: '$latencyMs' },
+        reliabilityPercent: { $avg: '$reliabilityScore' }, activeAssignments: { $sum: '$currentActiveTasks' },
+        capacity: { $sum: '$maxConcurrentTasks' } } },
+    ]);
     return res.json({
+      bandwidth: usage || { totalMB: 0, uploadMB: 0, downloadMB: 0 },
+      network: { sampledAt, freshnessSeconds: 60, freshNodes: 0, latencyMs: null,
+        reliabilityPercent: null, activeAssignments: 0, capacity: 0, ...network },
       totalUsers,
       totalNodes,
       activeNodes,
@@ -69,7 +87,7 @@ export const getAllUsers = async (req, res) => {
 
     const total = await User.countDocuments(query);
 
-    return res.json({ users, total, page: Number(page), pages: Math.ceil(total / limit) });
+    return res.json({ users: users.map(publicUser), total, page: Number(page), pages: Math.ceil(total / limit) });
   } catch (error) {
     return res.status(500).json({ message: "Failed to fetch users", error: error.message });
   }
@@ -158,7 +176,7 @@ export const blockUser = async (req, res) => {
 
     return res.json({
       message: "User blocked successfully",
-      user,
+      user: publicUser(user),
     });
   } catch (error) {
     return res.status(500).json({
@@ -189,7 +207,7 @@ export const unblockUser = async (req, res) => {
 
     return res.json({
       message: "User unblocked successfully",
-      user,
+      user: publicUser(user),
     });
   } catch (error) {
     return res.status(500).json({
@@ -209,4 +227,29 @@ export const getAdminLogs = async (req, res) => {
   } catch (error) {
     return res.status(500).json({ message: "Failed to fetch admin logs", error: error.message });
   }
+};
+
+export const getUserDetails = async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid user ID' });
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    const [wallet, nodes, tasks, audit] = await Promise.all([
+      Wallet.findOne({ userId: user._id }),
+      NodeDevice.find({ userId: user._id }).select('-apiKey').limit(100),
+      TestingTask.find({ clientId: user._id }).select('targetUrl status createdAt estimatedCost').sort({ createdAt: -1 }).limit(50),
+      AdminLog.find({ targetType: 'user', targetId: user._id }).sort({ createdAt: -1 }).limit(50),
+    ]);
+    return res.json({ user: publicUser(user), wallet, nodes, tasks, audit });
+  } catch { return res.status(500).json({ message: 'Unable to load user details' }); }
+};
+
+export const restrictUser = async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid user ID' });
+  try {
+    const user = await restrictAccount(req.user._id, req.params.id, req.body?.note);
+    const { disconnectAccountSockets } = await import('../services/socketService.js');
+    disconnectAccountSockets(user._id);
+    return res.json({ user: publicUser(user), message: 'Account restricted to read-only access' });
+  } catch (error) { return res.status(error.status || 500).json({ message: error.status ? error.message : 'Restriction failed' }); }
 };

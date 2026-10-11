@@ -73,11 +73,11 @@ function Login() {
 
           {error && <div className="login-error">{error}</div>}
 
-          <label>Email Address</label>
+          <label>Email or verified mobile number</label>
           <input
-            type="email"
+            type="text"
             name="email"
-            placeholder="Enter email"
+            placeholder="Email or +923001234567"
             value={form.email}
             onChange={handleChange}
             required

@@ -114,6 +114,7 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
     try {
       final response = await widget.api.submitTask({
         'targetUrl': _url.text.trim(),
+        'method': 'GET',
         'serviceType': _service,
         'targetRegion': _region,
         'executionLimit': int.parse(_count.text),
@@ -155,6 +156,8 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
                   validator: SubmitTaskScreen.validateUrl,
                   onChanged: (_) => invalidate(),
                 ),
+                const Text('HTTP method: GET only'),
+                const Text('Localization observes response language signals. Ad verification needs an expected ad identifier and is unavailable.'),
                 DropdownButtonFormField<String>(
                   isExpanded: true,
                   key: ValueKey('service:$_service'),
@@ -162,7 +165,6 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
                   decoration: const InputDecoration(labelText: 'Service type'),
                   items:
                       [
-                            'ad_verification',
                             'accessibility_testing',
                             'localization_testing',
                             'performance_testing',

@@ -16,6 +16,7 @@ vi.mock("../services/secureTaskRoutingService.js", () => ({
 }));
 
 import NodeDevice from "../models/NodeDevice.js";
+import User from '../models/User.js';
 import NodeTelemetry from "../models/NodeTelemetry.js";
 import TestingTask from "../models/TestingTask.js";
 import TaskSession from "../models/TaskSession.js";
@@ -40,6 +41,8 @@ const rankFastLast = async (_url, options) => {
 
 beforeAll(async () => {
   await mongoose.connect(process.env.MONGO_URI || "mongodb://localhost:27017/netshare_db");
+  await User.create({ _id: nodeUserId, name: 'Phase4 owner fixture', email: `phase4_${nodeUserId}@test.io`,
+    password: 'fixture', role: 'node_participant', isVerified: true });
   fastNode = await NodeDevice.create({
     userId: nodeUserId,
     deviceName: "test_phase4_fast",
@@ -86,6 +89,7 @@ afterAll(async () => {
   await TestingTask.deleteMany({ clientId });
   await NodeTelemetry.deleteMany({ nodeId: { $in: ids } });
   await NodeDevice.deleteMany({ _id: { $in: ids } });
+  await User.deleteOne({ _id: nodeUserId });
   await mongoose.disconnect();
 });
 

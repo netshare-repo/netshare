@@ -47,7 +47,7 @@ const creditTransactionSchema = new mongoose.Schema(
 // duplicate financial operations are rejected at the database boundary.
 creditTransactionSchema.index(
   { idempotencyKey: 1 },
-  { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } }
+  { name: "idempotencyKey_1", unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } }
 );
 
 export default mongoose.model("CreditTransaction", creditTransactionSchema);

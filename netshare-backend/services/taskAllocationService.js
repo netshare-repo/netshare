@@ -4,6 +4,7 @@ import { isNodeConnected } from "./socketService.js";
 import { HEALTH_CONFIG } from "../lib/nodeHealth.js";
 import logger from "../lib/logger.js";
 import config from "../config/env.js";
+import { refreshDailyBudgets } from './trafficPolicyService.js';
 
 const MAX_HEARTBEAT_AGE_MS = HEALTH_CONFIG.LIMITS.MAX_HEARTBEAT_AGE_MS;
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -126,6 +127,7 @@ export const requestMlRanking = async (features, options = {}) => {
 };
 
 export const rankEligibleNodes = async (targetRegion, options = {}) => {
+  await refreshDailyBudgets();
   const candidates = await NodeDevice.find({
     status: "active",
     $expr: { $lt: ["$currentActiveTasks", "$maxConcurrentTasks"] },

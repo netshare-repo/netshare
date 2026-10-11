@@ -5,11 +5,14 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'secure_routing_protocol.dart';
 import 'task_executor_service.dart';
 import 'vpn_service.dart';
+import 'stun_diagnostics.dart';
+import 'routing_lease.dart';
 
 typedef SignalingEmitter =
     void Function(String event, Map<String, dynamic> payload);
 
 class AndroidWebRtcService {
+  static final vpnLease = RoutingLease();
   static final Map<String, _AndroidRoutePeer> _peers = {};
   static final Map<String, List<Map<String, dynamic>>> _pendingCandidates = {};
   static final Set<String> _executedTaskIds = <String>{};
@@ -37,6 +40,7 @@ class AndroidWebRtcService {
               .toList(growable: false)
         : <Map<String, dynamic>>[];
 
+    unawaited(StunDiagnostics.update(iceServers));
     final peerConnection = await createPeerConnection({
       'iceServers': iceServers,
       'sdpSemantics': 'unified-plan',
@@ -215,11 +219,22 @@ class _AndroidRoutePeer {
       });
       return;
     }
+    if (!AndroidWebRtcService.vpnLease.acquire(sessionId)) {
+      await send(
+        'task_result',
+        _failurePayload(
+          task.taskId,
+          503,
+          'Android VPN is serving another authorized task',
+        ),
+      );
+      return;
+    }
     taskInProgress = true;
     lifecycle.transition(SecureRouteState.executing);
-    await send('ack', {'receivedMsgId': message.messageId});
 
     try {
+      await send('ack', {'receivedMsgId': message.messageId});
       final targetError = await TaskExecutorService.validateTarget(
         task.targetUrl,
         authorizedHost: task.authorizedHost,
@@ -255,10 +270,17 @@ class _AndroidRoutePeer {
         authorizedMethod: task.authorizedMethod,
       );
 
+      if (disposed || !AndroidWebRtcService.vpnLease.owns(sessionId)) {
+        throw StateError('Routing session closed');
+      }
       await NetShareVpnBridge.stopService().catchError(
         (_) => <String, dynamic>{},
       );
+      if (disposed || !AndroidWebRtcService.vpnLease.owns(sessionId)) {
+        throw StateError('Routing session closed');
+      }
       await NetShareVpnBridge.startService(
+        trafficPolicy: task.trafficPolicy,
         sessionName: 'NetShare-$sessionId',
         routingSessionId: sessionId,
         authorizedHost: task.authorizedHost,
@@ -274,6 +296,7 @@ class _AndroidRoutePeer {
         execute: (remainingMs) =>
             TaskExecutorService.executeHttpPerformanceTest(
               task.targetUrl,
+              serviceType: task.serviceType,
               timeoutMs: remainingMs,
               authorizedHost: task.authorizedHost,
               authorizedPort: task.authorizedPort,
@@ -282,7 +305,8 @@ class _AndroidRoutePeer {
             ),
       );
       final payload = result.toMap(task.taskId)
-        ..['routingSessionId'] = sessionId;
+        ..['routingSessionId'] = sessionId
+        ..['targetRegion'] = task.targetRegion;
       await send('task_result', payload);
       lifecycle.transition(SecureRouteState.resultSent);
     } catch (error) {
@@ -294,9 +318,7 @@ class _AndroidRoutePeer {
         lifecycle.transition(SecureRouteState.resultSent);
       }
     } finally {
-      await NetShareVpnBridge.stopService().catchError(
-        (_) => <String, dynamic>{},
-      );
+      await releaseVpn();
       taskInProgress = false;
     }
   }
@@ -304,7 +326,9 @@ class _AndroidRoutePeer {
   Future<void> _waitForVpn() async {
     for (var attempt = 0; attempt < 50; attempt += 1) {
       final status = await NetShareVpnBridge.getStatus();
-      if (status.state == VpnState.connected && status.isRunning) return;
+      if (status.state == VpnState.connected &&
+          status.isRunning &&
+          await NetShareVpnBridge.isNetworkReady()) return;
       if (status.state == VpnState.revoked) {
         throw StateError('Android VPN permission was revoked');
       }
@@ -313,6 +337,13 @@ class _AndroidRoutePeer {
     throw TimeoutException('VpnService did not become ready');
   }
 
+  Future<void> releaseVpn() =>
+      AndroidWebRtcService.vpnLease.release(sessionId, () async {
+        await NetShareVpnBridge.stopService().catchError(
+          (_) => <String, dynamic>{},
+        );
+      });
+
   Map<String, dynamic> _failurePayload(
     String taskId,
     int statusCode,
@@ -320,14 +351,14 @@ class _AndroidRoutePeer {
   ) => {
     'taskId': taskId,
     'success': false,
-    'statusCode': statusCode,
+    'statusCode': 0,
     'latencyMs': 0,
     'bandwidthUsedMB': 0,
     'downloadBandwidthMB': 0,
     'uploadBandwidthMB': 0,
-    'packetLoss': 100,
+    'packetLoss': null,
     'successRate': 0,
-    'resultData': {'error': message},
+    'resultData': {'error': message, 'errorCode': statusCode},
     'completedAt': DateTime.now().toUtc().toIso8601String(),
   };
 
@@ -362,9 +393,7 @@ class _AndroidRoutePeer {
     if (lifecycle.state != SecureRouteState.closed) {
       lifecycle.transition(SecureRouteState.closed);
     }
-    await NetShareVpnBridge.stopService().catchError(
-      (_) => <String, dynamic>{},
-    );
+    await releaseVpn();
     try {
       await dataChannel?.close();
     } catch (_) {}

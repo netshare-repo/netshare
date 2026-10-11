@@ -90,6 +90,14 @@ beforeAll(async () => {
     packetLoss: 0,
     bandwidthUsedMB: 1.5,
     statusCode: 200,
+    resultData: { schemaVersion: 2, targetRegion: 'Pakistan', nodeRegion: 'Pakistan',
+      requestedExecutions: 2, attemptedExecutions: 2, completedExecutions: 2,
+      totalDurationMs: 160, executions: [1, 2].map(execution => ({
+        execution, success: true, statusCode: 200,
+        finalUrl: 'https://example.com/', contentType: 'text/html',
+        latencyMs: 80, responseSizeBytes: 512,
+        startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+      })) },
   });
 
   pendingTask = await TestingTask.create({
@@ -195,6 +203,28 @@ describe("Phase 3: deterministic pricing and availability", () => {
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({ ...base, serviceType: "open_proxy" })
       .expect(400);
+    const unsupported = await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ ...base, serviceType: "ad_verification" })
+      .expect(400);
+    expect(unsupported.body.message).toContain('not supported yet');
+    const wrongMethod = await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ ...base, method: "HEAD" })
+      .expect(400);
+    expect(wrongMethod.body.message).toContain('Only GET');
+    await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ ...base, targetUrl: "https://user:password@example.net/" })
+      .expect(400);
+    await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ ...base, targetUrl: "https://example.net/?api_key=private" })
+      .expect(400);
     await request(app)
       .post("/api/tasks")
       .set("Authorization", `Bearer ${ownerToken}`)
@@ -232,6 +262,23 @@ describe("Phase 3: CSV report authorization", () => {
     expect(response.headers["content-disposition"]).toContain("attachment");
     expect(response.text).toContain("pricingVersion");
     expect(response.text).toContain("example.com");
+    expect(response.text).toContain('executionResponseSizeBytes');
+    expect(response.text).toContain('executionDownloadBandwidthMB');
+    expect(response.text).toContain('contentLanguage');
+    expect(response.text).toContain('text/html');
+    expect(response.text.trim().split('\n')).toHaveLength(3);
+  });
+
+  it('returns persisted execution records only to the owning client', async () => {
+    const ownerResponse = await request(app)
+      .get(`/api/tasks/${settledTask._id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+    expect(ownerResponse.body.result.resultData.executions).toHaveLength(2);
+    await request(app)
+      .get(`/api/tasks/${settledTask._id}`)
+      .set('Authorization', `Bearer ${otherToken}`)
+      .expect(403);
   });
 
   it("denies reports to non-owners and unfinished tasks", async () => {

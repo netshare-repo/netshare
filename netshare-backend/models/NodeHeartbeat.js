@@ -22,10 +22,12 @@ const nodeHeartbeatSchema = new mongoose.Schema(
       default: 0,
     },
     networkStatus: {
-      latencyMs: { type: Number, default: 0 },
-      uploadSpeedMbps: { type: Number, default: 0 },
-      downloadSpeedMbps: { type: Number, default: 0 },
-      packetLoss: { type: Number, default: 0 },
+      latencyMs: { type: Number, default: null },
+      uploadSpeedMbps: { type: Number, default: null },
+      downloadSpeedMbps: { type: Number, default: null },
+      packetLoss: { type: Number, default: null },
+      packetLossSource: { type: String, default: null },
+      stabilityJitterMs: { type: Number, default: null },
       ipAddress: { type: String, default: "" },
     },
     timestamp: {

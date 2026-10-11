@@ -17,6 +17,7 @@ function Register() {
     phone: "",
     password: "",
     role: "platform_client",
+    verificationMethod: 'email',
   });
 
   const handleChange = (e) => {
@@ -37,7 +38,7 @@ function Register() {
       // Redirect to OTP verification page, passing the email and optional devOtp
       navigate("/verify-signup-otp", {
         state: { 
-          email: form.email,
+          email: res.data.identifier || form.email,
           devOtp: res.data.devOtp 
         }
       });
@@ -91,23 +92,28 @@ function Register() {
             required
           />
 
-          <label>Email Address</label>
+          <label>Verification method</label>
+          <select name="verificationMethod" value={form.verificationMethod} onChange={handleChange}>
+            <option value="email">Email verification code</option><option value="sms">Mobile SMS OTP</option>
+          </select>
+          <label>Email Address (required for email verification)</label>
           <input
             type="email"
             name="email"
             placeholder="Enter email"
             value={form.email}
             onChange={handleChange}
-            required
+            required={form.verificationMethod === 'email'}
           />
 
           <label>Phone Number</label>
           <input
             type="text"
             name="phone"
-            placeholder="03XXXXXXXXX"
+            placeholder="+923001234567"
             value={form.phone}
             onChange={handleChange}
+            required={form.verificationMethod === 'sms'}
           />
 
           <label>Password</label>

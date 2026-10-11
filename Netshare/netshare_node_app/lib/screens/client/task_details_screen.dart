@@ -86,6 +86,11 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
       builder: (data) {
         final task = data['task'] as Map<String, dynamic>;
         final result = data['result'];
+        final resultData = result is Map ? result['resultData'] : null;
+        final details = resultData is Map ? resultData : const {};
+        final executions = details['executions'] is List
+            ? details['executions'] as List
+            : const [];
         final completed = ['completed', 'settled'].contains(task['status']);
         _terminal =
             completed || ['failed', 'cancelled'].contains(task['status']);
@@ -95,6 +100,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
           children: [
             infoTile('Task ID', task['_id']),
             infoTile('Target URL', task['targetUrl']),
+            infoTile('HTTP method', task['method'] ?? 'GET'),
             infoTile('Status', task['status']),
             infoTile(
               'Service / region',
@@ -117,10 +123,31 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
               infoTile('Success rate', '${result['successRate']}%'),
               infoTile('Response time', '${result['latencyMs']} ms'),
               infoTile('Bandwidth', '${result['bandwidthUsedMB']} MB'),
-              infoTile('HTTP status', result['statusCode']),
-              infoTile('Result', result['resultData']),
+              infoTile('HTTP status', result['statusCode'] == 0 ? 'No HTTP response' : result['statusCode']),
+              infoTile('Node region', details['nodeRegion'] ?? task['assignedNodeId']?['region']),
+              infoTile('Attempted executions', details['attemptedExecutions']),
+              infoTile('Completed executions', details['completedExecutions']),
+              infoTile('Total duration', details['totalDurationMs'] == null ? null : '${details['totalDurationMs']} ms'),
+              infoTile('Total response size', details['totalResponseSizeBytes'] == null ? null : '${details['totalResponseSizeBytes']} bytes'),
+              infoTile('Recorded at', result['completedAt']),
+              if (details['error'] != null) infoTile('Error', details['error']),
+              for (final raw in executions)
+                if (raw is Map) ...[
+                  const Divider(),
+                  Text('Execution ${raw['execution']}', style: Theme.of(context).textTheme.titleMedium),
+                  infoTile('Success', raw['success']),
+                  infoTile('Started', raw['startedAt']),
+                  infoTile('Completed', raw['completedAt']),
+                  infoTile('HTTP status', raw['statusCode'] == 0 ? 'No HTTP response' : raw['statusCode']),
+                  infoTile('Final URL', raw['finalUrl']),
+                  infoTile('Content type', raw['contentType']),
+                  infoTile('Latency', raw['latencyMs'] == null ? null : '${raw['latencyMs']} ms'),
+                  infoTile('Response size', raw['responseSizeBytes'] == null ? null : '${raw['responseSizeBytes']} bytes'),
+                  infoTile('Service evidence', raw['serviceEvidence']),
+                  if (raw['error'] != null) infoTile('Error', raw['error']),
+                ],
             ],
-            if (completed && result != null)
+            if (_terminal && result != null)
               FilledButton(
                 onPressed: _busy ? null : report,
                 child: const Text('Open / save CSV report'),

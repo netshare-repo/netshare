@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as socket_io;
 import 'api_service.dart';
 import 'android_webrtc_service.dart';
+import 'vpn_service.dart';
+import 'stun_diagnostics.dart';
 
 class NodeSocketService {
   static socket_io.Socket? _socket;
@@ -111,7 +113,14 @@ class NodeSocketService {
     _heartbeatTimer = null;
   }
 
-  static void _sendHeartbeat() {
+  static Future<void> _sendHeartbeat() async {
+    if (_socket == null || !_socket!.connected) return;
+    Map<String, dynamic> tun = {};
+    try {
+      tun = await NetShareVpnBridge.getTunMetrics();
+    } catch (_) {
+      /* Explicitly unmeasured. */
+    }
     if (_socket == null || !_socket!.connected) return;
 
     // Send only what we can honestly measure.
@@ -123,10 +132,16 @@ class NodeSocketService {
       'cpuUsage': null, // Unavailable on Android without platform channel
       'memoryUsage': null, // Unavailable on Android without platform channel
       'networkStatus': {
-        'latencyMs': null, // Measured only during active tasks
-        'uploadSpeedMbps': null, // Measured only during active tasks
-        'downloadSpeedMbps': null, // Measured only during active tasks
-        'packetLoss': null, // Measured only during active tasks
+        'latencyMs': StunDiagnostics.recent?['latencyMs'],
+        'uploadSpeedMbps': tun['state'] == 'connected'
+            ? tun['uploadSpeedMbps']
+            : null,
+        'downloadSpeedMbps': tun['state'] == 'connected'
+            ? tun['downloadSpeedMbps']
+            : null,
+        'packetLoss': StunDiagnostics.recent?['packetLoss'],
+        'packetLossSource': StunDiagnostics.recent?['packetLossSource'],
+        'stabilityJitterMs': StunDiagnostics.recent?['stabilityJitterMs'],
       },
       'timestamp': DateTime.now().toIso8601String(),
     };

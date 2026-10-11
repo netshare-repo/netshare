@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { getProfile, updateProfile, changePassword } from "../../api/userApi";
 import { useAuth } from "../../context/authState";
+import axiosInstance from '../../api/axiosInstance';
 import "./Profile.css"; // We'll create a basic CSS
 
 function Profile() {
@@ -13,6 +14,31 @@ function Profile() {
   const [error, setError] = useState("");
   const [passMessage, setPassMessage] = useState("");
   const [passError, setPassError] = useState("");
+  const [photo, setPhoto] = useState(null);
+  const [role, setRole] = useState('both');
+  const [rolePassword, setRolePassword] = useState('');
+  const changeRole = async (event) => {
+    event.preventDefault();
+    if (!window.confirm(`Change your account role to ${role}? Stop participation and finish tasks first.`)) return;
+    setLoading(true); setError('');
+    try {
+      await axiosInstance.put('/users/role', { role, password: rolePassword, confirm: true });
+      window.location.assign('/login');
+    } catch (err) { setError(err.response?.data?.message || 'Role change failed'); }
+    finally { setLoading(false); setRolePassword(''); }
+  };
+  const pickPhoto = async (event) => {
+    const file = event.target.files?.[0];
+    setPhoto(null);
+    if (!file) return;
+    if (!['image/png', 'image/jpeg'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+      setError('Choose a PNG/JPEG image of at most 2 MB.'); return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => setError('Could not read image.');
+    reader.onload = () => { setPhoto({ mimeType: file.type, base64: String(reader.result).split(',')[1] }); setError(''); };
+    reader.readAsDataURL(file);
+  };
 
   async function fetchProfile() {
     try {
@@ -40,9 +66,11 @@ function Profile() {
       const res = await updateProfile({
         name: profileData.name,
         phone: profileData.phone,
-        profileImage: profileData.profileImage
+        ...(photo ? { photo } : {})
       });
       setMessage(res.message);
+      setProfileData(prev => ({ ...prev, profileImage: res.user.profileImage }));
+      setPhoto(null);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to update profile");
     } finally {
@@ -82,6 +110,13 @@ function Profile() {
       
       <div className="profile-section">
         <p><strong>Role:</strong> {user?.role}</p>
+        {user?.role !== 'admin' && <form onSubmit={changeRole}>
+          <label>Account role <select value={role} onChange={e => setRole(e.target.value)}>
+            <option value="node_participant">Node Participant</option><option value="platform_client">Platform Client</option><option value="both">Both</option>
+          </select></label>
+          <label>Confirm current password <input type="password" required value={rolePassword} onChange={e => setRolePassword(e.target.value)} /></label>
+          <button disabled={loading}>Change account role</button>
+        </form>}
       </div>
 
       <div className="profile-section">
@@ -102,12 +137,9 @@ function Profile() {
             value={profileData.phone} 
             onChange={(e) => setProfileData({...profileData, phone: e.target.value})} 
           />
-          <label>Profile Image URL</label>
-          <input 
-            type="text" 
-            value={profileData.profileImage} 
-            onChange={(e) => setProfileData({...profileData, profileImage: e.target.value})} 
-          />
+          <label>Profile photo (PNG/JPEG, maximum 2 MB)</label>
+          {profileData.profileImage?.startsWith('data:image/') && <img src={profileData.profileImage} alt="Profile" width="80" height="80" />}
+          <input type="file" accept="image/png,image/jpeg" onChange={pickPhoto} disabled={loading} />
           <button type="submit" disabled={loading}>{loading ? "Saving..." : "Save Profile"}</button>
         </form>
       </div>

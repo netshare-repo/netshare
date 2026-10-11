@@ -1,8 +1,13 @@
 import mongoose from 'mongoose';
 
+export const supportsMongoTransactions = () =>
+  ['ReplicaSetWithPrimary', 'Sharded'].includes(
+    mongoose.connection?.client?.topology?.description?.type
+  );
+
 // Review state, audit, and notifications must commit together; never silently degrade.
 export const runTransaction = async (operation) => {
-  if (!['ReplicaSetWithPrimary', 'Sharded'].includes(mongoose.connection?.client?.topology?.description?.type)) {
+  if (!supportsMongoTransactions()) {
     throw Object.assign(new Error('This operation requires a MongoDB replica set'), { status: 503 });
   }
   const session = await mongoose.startSession();

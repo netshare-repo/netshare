@@ -1,9 +1,34 @@
 # NetShare — Implementation Status
+
+## Phase 10A — Real client task results (2026-10-11)
+
+Implemented GET-only accessibility (HTTP reachability), performance (GET duration/size), and localization (response language observations). Unsupported ad, UX, compliance, and other methods are rejected. Android DataChannel execution now carries actual per-execution records plus aggregate observations; backend validates/binds and persists them, with exactly-once transactional settlement. React and Flutter details and CSV read the persisted result. No response preview is returned. See [Phase 10A audit](PHASE10A_REAL_TASK_RESULTS.md). Physical Android network E2E remains unverified; this is not device certification.
+
+## Phase 9 — Release Blocker Closure (authoritative, 2026-10-09)
+
+This section supersedes the historical Phase 8 snapshot below. Completed phases were preserved; only the 20 partial FRs, API compatibility and production-path regressions were addressed. SRS and Chapter 3 were not changed.
+
+- **221/221 backend tests PASS** (12 files, real isolated MongoDB replica set); **62/62 Flutter tests PASS**; **flutter analyze clean**; **5/5 native Kotlin tests PASS**.
+- **Frontend production build/full lint PASS**; **Android arm64 debug build PASS**, actual APK minimum **24**, target **36**.
+- **API 21 BLOCKED by the current toolchain**: Flutter 3.41.9 defines minimum 24 and resolved `shared_preferences_android 2.4.23` requires 24. Direct Gradle manifest merging with app minimum 21 failed against that dependency. No manifest override or SRS change masks this failure.
+- **73 DONE / 11 PARTIAL / 0 NOT_DONE of 84 FRs (86.90%)**. Newly DONE: FR2.3, FR2.5, FR5.4–5.6, FR12.3–12.4, FR13.3–13.4.
+- Implemented validated owner profile photos; confirmed transactional role changes; Flutter node withdrawals with retry idempotency; admin bandwidth/network KPIs, individual details and separate audited read-only restriction. Credential/OTP/API-key redaction and allocation/account-state race guards were hardened.
+- Implemented canonical unique phone-only identity, web/Flutter email/SMS selection and bounded real-provider adapter; no live SMS delivery is claimed.
+- Startup now migrates legacy phone and financial idempotency indexes explicitly. Shared contact numbers on email accounts remain untouched; genuine SMS-identity or transaction-key conflicts fail closed with actionable diagnostics.
+- Implemented UTC quota rollover, persisted native TUN-byte caps/pacing, measured transfer counters, session activity and bounded STUN diagnostics with explicit measurement provenance. Invalid limits and edits during active tasks are rejected. Device/network acceptance remains blocked/unverified.
+- Removed mobile manual/simulated task completion and retired the desktop Socket.IO task daemon. Production tasks remain authorized DataChannel execution only. Explicit integration-fixture modules remain, not a production fallback.
+- A single Android VPN lease prevents overlapping routes from stopping or replacing another task's tunnel; failures clean up only owned resources.
+- Real-device E2E, background/lock/revoke/handover, actual quota/speed enforcement, TURN/NAT, live SMS/ML, Docker and production infrastructure remain external acceptance gates. API 21 also requires a compatible toolchain/dependency migration, not merely hardware.
+- Phase 8 NFR/performance findings are historical and unchanged, not rerun or upgraded by Phase 9: 23 strict NFRs = 12 MET / 5 PARTIAL / 6 UNVERIFIED.
+
+Exact evidence and limits: [release report](RELEASE_CANDIDATE_REPORT.md), [84-row traceability](REQUIREMENTS_TRACEABILITY.md), [current backlog](IMPLEMENTATION_BACKLOG.md). **Release NOT READY. Phase 9 stopped here.**
+
+## Historical Phase 8 snapshot (superseded where Phase 9 differs)
 > Generated: 2026-09-26 | Updated: 2026-10-08 | Master status register of all modules and features
 
 ## Phase 8 — Release Candidate Validation (NOT READY)
 
-This section and the refreshed requirements/NFR registers are authoritative. Phase 0–7 implementation records below are preserved history, not blanket production acceptance. No new product features were added; Phase 8 fixes failed validation/security/transaction/deployment checks.
+Historical Phase 8 evidence, superseded by the Phase 9 section above where changed. Phase 0–7 implementation records below are preserved history, not blanket production acceptance. No new product features were added in Phase 8; that phase fixed failed validation/security/transaction/deployment checks.
 
 - Backend: **205/205 PASS** across 10 files on real MongoDB 8.2.7 single-member `phase8rs`; baseline 179 plus 26 acceptance cases.
 - Flutter: **50/50 PASS**, analysis clean; Android arm64 debug APK PASS. APK minimum API 24 conflicts with SRS OE-1 API 21.

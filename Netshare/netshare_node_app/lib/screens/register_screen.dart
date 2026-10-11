@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
 import 'auth/verify_otp_screen.dart';
+import 'role_home_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -21,6 +22,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool isLoading = false;
   String role = 'node_participant';
+  String verificationMethod = 'email';
 
   Future<void> register() async {
     final name = nameController.text.trim();
@@ -29,7 +31,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final password = passwordController.text.trim();
     final confirmPassword = confirmPasswordController.text.trim();
 
-    if (name.isEmpty || email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
+    if (name.isEmpty ||
+        (verificationMethod == 'email' ? email.isEmpty : phone.isEmpty) ||
+        password.isEmpty ||
+        confirmPassword.isEmpty) {
       showMessage('Name, email, and passwords are required');
       return;
     }
@@ -53,19 +58,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
         phone: phone,
         password: password,
         role: role,
+        verificationMethod: verificationMethod,
       );
 
       if (!mounted) return;
 
-      if (response['devOtp'] != null) {
-        showMessage('Registered successfully. (Dev OTP: ${response['devOtp']})');
-      } else {
-        showMessage('Registration successful. Please check your email for OTP.');
+      if (response['verificationRequired'] == false &&
+          response['token'] != null) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const RoleHomeScreen()),
+          (_) => false,
+        );
+        return;
+      }
+
+      final developmentOtp = response['devOtp']?.toString();
+      if (developmentOtp == null) {
+        showMessage(
+          'Registration successful. Check your selected verification channel for the code.',
+        );
       }
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => VerifyOtpScreen(email: email)),
+        MaterialPageRoute(
+          builder: (_) => VerifyOtpScreen(
+            email: response['identifier']?.toString() ?? email,
+            developmentOtp: developmentOtp,
+          ),
+        ),
       );
     } catch (e) {
       showMessage(e.toString().replaceAll('Exception:', '').trim());
@@ -74,18 +96,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  void showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+  void openExistingVerification() {
+    final identifier = verificationMethod == 'sms'
+        ? phoneController.text.trim()
+        : emailController.text.trim();
+    if (identifier.isEmpty) {
+      showMessage('Enter your email or mobile number first.');
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => VerifyOtpScreen(email: identifier)),
     );
+  }
+
+  void showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create NetShare Account'),
-      ),
+      appBar: AppBar(title: const Text('Create NetShare Account')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(22),
@@ -94,10 +128,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             children: [
               const Text(
                 'Join NetShare',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                ),
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 8),
               const Text(
@@ -105,10 +136,43 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 style: TextStyle(color: AppColors.textMuted),
               ),
               const SizedBox(height: 28),
-              DropdownButtonFormField<String>(initialValue: role, decoration: const InputDecoration(labelText: 'Account role'),
-                items: const [DropdownMenuItem(value: 'node_participant', child: Text('Node Participant')),
-                  DropdownMenuItem(value: 'platform_client', child: Text('Platform Client')), DropdownMenuItem(value: 'both', child: Text('Both'))],
-                onChanged: isLoading ? null : (value) => setState(() => role = value!)),
+              DropdownButtonFormField<String>(
+                initialValue: verificationMethod,
+                decoration: const InputDecoration(
+                  labelText: 'Verification method',
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'email',
+                    child: Text('Email verification'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'sms',
+                    child: Text('Mobile SMS OTP (+country code)'),
+                  ),
+                ],
+                onChanged: isLoading
+                    ? null
+                    : (value) => setState(() => verificationMethod = value!),
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: role,
+                decoration: const InputDecoration(labelText: 'Account role'),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'node_participant',
+                    child: Text('Node Participant'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'platform_client',
+                    child: Text('Platform Client'),
+                  ),
+                  DropdownMenuItem(value: 'both', child: Text('Both')),
+                ],
+                onChanged: isLoading
+                    ? null
+                    : (value) => setState(() => role = value!),
+              ),
               CustomTextField(
                 controller: nameController,
                 label: 'Full Name',
@@ -152,6 +216,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 text: 'Create Account',
                 isLoading: isLoading,
                 onPressed: register,
+              ),
+              Center(
+                child: TextButton(
+                  onPressed: isLoading ? null : openExistingVerification,
+                  child: const Text('Account already created? Verify OTP'),
+                ),
               ),
             ],
           ),

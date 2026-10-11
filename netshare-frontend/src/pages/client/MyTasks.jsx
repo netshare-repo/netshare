@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, RefreshCcw, Search, ExternalLink, Star } from "lucide-react";
+import { Link } from "react-router-dom";
 import axiosInstance from "../../api/axiosInstance";
 import ClientLayout from "../../layouts/ClientLayout";
 import "./MyTasks.css";
@@ -165,7 +166,7 @@ function MyTasks() {
                         <td>
                           <div className="url-cell">
                             <ExternalLink size={15} />
-                            <span>{task.targetUrl}</span>
+                            <Link to={`/client/tasks/${task._id}`}>{task.targetUrl}</Link>
                           </div>
                         </td>
                         <td>{task.serviceType}</td>

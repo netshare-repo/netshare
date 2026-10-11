@@ -4,6 +4,9 @@ import '../models/credit_transaction_model.dart';
 import '../models/wallet_model.dart';
 import '../services/wallet_service.dart';
 import '../widgets/dashboard_card.dart';
+import '../services/auth_service.dart';
+import '../services/client_api.dart';
+import 'withdrawals_screen.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -49,9 +52,7 @@ class _WalletScreenState extends State<WalletScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Wallet & Earnings'),
-      ),
+      appBar: AppBar(title: const Text('Wallet & Earnings')),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -59,6 +60,35 @@ class _WalletScreenState extends State<WalletScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(18),
                 children: [
+                  FilledButton(
+                    onPressed: () async {
+                      try {
+                        final me = await AuthService.getMe();
+                        final api = ClientApi(
+                          role: me['user']['role'].toString(),
+                        );
+                        if (!context.mounted) {
+                          api.close();
+                          return;
+                        }
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => WithdrawalsScreen(api: api),
+                          ),
+                        );
+                        api.close();
+                        if (mounted) await loadWallet();
+                      } catch (error) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text('$error')));
+                        }
+                      }
+                    },
+                    child: const Text('Withdraw earnings'),
+                  ),
                   DashboardCard(
                     title: 'Current Balance',
                     value: '${wallet?.balance ?? 0} Credits',
@@ -82,10 +112,7 @@ class _WalletScreenState extends State<WalletScreen> {
                   const SizedBox(height: 24),
                   const Text(
                     'Transaction History',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 12),
                   if (transactions.isEmpty)
@@ -106,7 +133,9 @@ class _WalletScreenState extends State<WalletScreen> {
                         child: Row(
                           children: [
                             CircleAvatar(
-                              backgroundColor: txColor(tx.type).withValues(alpha: 0.12),
+                              backgroundColor: txColor(
+                                tx.type,
+                              ).withValues(alpha: 0.12),
                               child: Icon(
                                 tx.type == 'credit'
                                     ? Icons.add_rounded

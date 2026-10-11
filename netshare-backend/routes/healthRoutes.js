@@ -27,10 +27,14 @@ router.get('/ready', async (req, res) => {
   const topology = mongoose.connection.client?.topology?.description?.type;
   checks.transactions = ['ReplicaSetWithPrimary', 'Sharded'].includes(topology) ? 'available' : 'unavailable';
   const isReady = checks.mongodb === 'connected' && (!config.isProduction || checks.transactions === 'available');
+  const isDegraded = isReady && checks.transactions !== 'available';
   
   res.status(isReady ? 200 : 503).json({
-    status: isReady ? 'ready' : 'not_ready',
+    status: isReady ? (isDegraded ? 'degraded' : 'ready') : 'not_ready',
     checks,
+    ...(isDegraded && {
+      limitation: 'Transaction-dependent task, settlement, payment and recovery operations are unavailable until MongoDB uses a replica set.',
+    }),
     timestamp: new Date().toISOString(),
   });
 });

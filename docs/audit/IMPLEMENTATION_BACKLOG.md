@@ -1,4 +1,33 @@
 # NetShare — Implementation Backlog (Corrected)
+
+## Phase 10A follow-up (2026-10-11)
+
+The real task result implementation and code/test evidence are recorded in [Phase 10A audit](PHASE10A_REAL_TASK_RESULTS.md). Remaining acceptance: physical Android device with controlled public endpoint to verify device egress, TUN bytes, redirects, VPN revoke/background/recovery and TURN/NAT separation. Ad, UX, and compliance need an explicit test contract and expected outcomes before they can be offered. Response previews remain intentionally unavailable. The Phase 9 historical release blockers below still apply.
+
+## Phase 9 — Current release blockers (authoritative, 2026-10-09)
+
+**NOT READY.** Current evidence: backend **221/221**, Flutter **62/62**, native Kotlin **5/5**, Flutter analysis, Android arm64 debug build, frontend production build and full lint all PASS. The debug APK still requires API 24.
+
+Nine previously partial FRs are code-complete and tested: FR2.3, FR2.5, FR5.4–5.6, FR12.3–12.4, FR13.3–13.4. Daily quotas, pacing, measured live metrics, STUN diagnostics and SMS/phone identity are implemented but do not bypass live acceptance gates.
+
+| Remaining item | Status | Exact next evidence needed |
+|---|---|---|
+| API 21 / OE-1 | BLOCKED (dependency/toolchain) | Flutter 3.41.9 and shared_preferences_android 2.4.23 require 24. Direct API-21 manifest build fails. Requires a compatible Flutter/Dart/plugin migration or port and API-21 device regression; no SRS modification or overrideLibrary workaround. |
+| FR1.1 / FR1.4 | PARTIAL | Live provider/handset SMS signup, resend, verification and reset evidence. Adapter timeout/rejection and canonical unique identity are covered by explicit fixtures. |
+| FR3.1 / FR3.5 / FR3.6 / FR4.5 | PARTIAL / device BLOCKED | Real authorized Android task through TUN/result/settlement, participation/VPN correlation, screen lock/background, revoke and cleanup. No connected device or AVD is available. |
+| FR3.2 / FR3.3 | PARTIAL / device BLOCKED | Actual TUN byte-budget exhaustion, persisted process-restart budget, UTC rollover and directional throughput under load. Current unit-tested scope is forwarded IP bytes, not all interface wire/signaling bytes. |
+| FR3.7 / FR4.3 | PARTIAL / device BLOCKED | Compare native counters/speeds/session IDs with actual Android traffic; widget/native code is implemented. |
+| FR4.2 / TURN/NAT | PARTIAL / UNVERIFIED | Actual Android STUN loss/jitter observations and separate TURN relay/NAT-separated candidate evidence. STUN unit packets do not prove live connectivity. |
+| Wi-Fi/mobile recovery | BLOCKED | Physical interfaces and active task/network handover/reconnect evidence. |
+| Docker production runtime | BLOCKED | Docker daemon, authenticated fresh/existing-volume bootstrap, health/restart/build checks. |
+| Production infrastructure / NFRs | UNVERIFIED | TLS, provider delivery, authenticated HA/restore, fleet/multi-backend/Redis recovery, browser/device performance and usability. Historical local p50/p95 evidence is not a deployment benchmark. |
+| Live Python ML | BLOCKED | Install declared runtime dependencies in an appropriate environment and verify actual service; deterministic failure fallback remains covered. |
+
+Operational migration: configure optional TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_FROM_NUMBER for SMS. Startup builds replacement unique identity indexes before dropping old email_1; conflicting legacy phone data must be reviewed, not silently merged. Legacy daily-usage records retain their spent allowance on migration day. Do not reinstate the retired Socket.IO daemon or mobile manual completion path.
+
+Official totals: **73 DONE / 11 PARTIAL / 0 NOT_DONE / 84**. Strict NFR totals remain **12 MET / 5 PARTIAL / 6 UNVERIFIED / 23** from Phase 8; no new environment PASS is claimed. See [release report](RELEASE_CANDIDATE_REPORT.md). STOP after Phase 9.
+
+## Historical Phase 8 backlog (superseded by the table above)
 > Corrected: 2026-09-26 | Ordered by implementation phases from development roadmap
 
 ## Phase 8 — Current release blockers (2026-10-08)

@@ -69,6 +69,18 @@ void main() {
       expect(batch.uploadBandwidthMB, closeTo(0.003, 0.000001));
       expect(batch.packetLoss, isNull);
       expect(batch.successRate, 100);
+      final records = batch.resultData['executions'] as List;
+      expect(records, hasLength(3));
+      expect(records.map((record) => record['execution']), [1, 2, 3]);
+      expect(
+        records.every(
+          (record) =>
+              record['startedAt'] != null && record['completedAt'] != null,
+        ),
+        isTrue,
+      );
+      expect(batch.resultData['attemptedExecutions'], 3);
+      expect(batch.resultData['completedExecutions'], 3);
     },
   );
   test(
@@ -86,6 +98,10 @@ void main() {
       expect(calls, 1);
       expect(batch.success, isFalse);
       expect(batch.successRate, 0);
+      expect(
+        (batch.resultData['executions'] as List).single['success'],
+        isFalse,
+      );
       final timedOut = await TaskExecutorService.executeRequestBatch(
         executionLimit: 2,
         timeoutMs: 1,
@@ -96,6 +112,90 @@ void main() {
       );
       expect(timedOut.success, isFalse);
       expect(timedOut.resultData['completedExecutions'], 0);
+    },
+  );
+  test(
+    'unsupported service behavior and unauthorized method fail closed',
+    () async {
+      await expectLater(
+        TaskExecutorService.executeHttpPerformanceTest(
+          'https://example.com/',
+          serviceType: 'ad_verification',
+        ),
+        throwsFormatException,
+      );
+      final protocol = SecureRoutingProtocol();
+      final base = {
+        'taskId': 'task',
+        'routingSessionId': 'route',
+        'targetUrl': 'https://example.com/',
+        'authorizedHost': 'example.com',
+        'authorizedPort': 443,
+        'executionLimit': 1,
+        'timeoutMs': 25000,
+        'serviceType': 'performance_testing',
+      };
+      expect(
+        () => AuthorizedTaskRequest.fromMessage(
+          protocol.build('route', 'task_request', {
+            ...base,
+            'authorizedMethod': 'HEAD',
+          }),
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => AuthorizedTaskRequest.fromMessage(
+          protocol.build('route', 'task_request', {
+            ...base,
+            'authorizedMethod': 'GET',
+            'serviceType': 'ad_verification',
+          }),
+        ),
+        throwsFormatException,
+      );
+    },
+  );
+  test(
+    'service evidence reflects the HTTP response without returning a body preview',
+    () {
+      final html =
+          '<html lang="fr-CA"><body>private content</body></html>'.codeUnits;
+      final localization = TaskExecutorService.serviceEvidence(
+        serviceType: 'localization_testing',
+        statusCode: 200,
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'content-language': 'fr-CA',
+        },
+        bodyBytes: html,
+        latencyMs: 17,
+      );
+      expect(localization, {
+        'contentLanguage': 'fr-CA',
+        'htmlLanguage': 'fr-CA',
+      });
+      expect(localization.toString(), isNot(contains('private content')));
+      expect(
+        TaskExecutorService.serviceEvidence(
+          serviceType: 'accessibility_testing',
+          statusCode: 503,
+          headers: const {},
+          bodyBytes: const [],
+          latencyMs: 17,
+        ),
+        {'httpReachable': true, 'httpSuccess': false},
+      );
+      expect(
+        TaskExecutorService.serviceEvidence(
+          serviceType: 'performance_testing',
+          statusCode: 200,
+          headers: const {},
+          bodyBytes: [1, 2, 3],
+          latencyMs: 17,
+        ),
+        {'responseSizeBytes': 3, 'durationMs': 17},
+      );
     },
   );
   test(

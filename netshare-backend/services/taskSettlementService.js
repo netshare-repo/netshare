@@ -15,6 +15,91 @@ import logger from '../lib/logger.js';
 
 const invalid = (message, code = 'INVALID_RESULT') => Object.assign(new Error(message), { code });
 
+const finiteMetric = (value, max) => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= max;
+const shortText = (value, max = 1000) => value == null ? null : String(value).slice(0, max);
+const safeError = value => shortText(value)?.replace(/([?&](?:token|api[_-]?key|password|secret|credential|signature|auth)[^=]*=)[^&#\s]+/gi, '$1[redacted]')
+  .replace(/\bBearer\s+[^\s,;]+/gi, 'Bearer [redacted]');
+
+const validatedResultData = (task, node, data) => {
+  if (data?.schemaVersion !== 2) {
+    const legacy = data && typeof data === 'object' ? data : {};
+    return {
+      targetRegion: task.targetRegion, nodeRegion: node.region,
+      responseSizeBytes: finiteMetric(legacy.responseSizeBytes, 1024 * 1024 * 1024) ? legacy.responseSizeBytes : null,
+      contentType: shortText(legacy.contentType, 200),
+      ttfbMs: finiteMetric(legacy.ttfbMs, 300000) ? legacy.ttfbMs : null,
+      totalTimeMs: finiteMetric(legacy.totalTimeMs, 300000) ? legacy.totalTimeMs : null,
+      error: safeError(legacy.error),
+    };
+  }
+  const records = data.executions;
+  if (!Array.isArray(records) || records.length > task.executionLimit || records.length > 100 ||
+      data.requestedExecutions !== task.executionLimit || data.attemptedExecutions !== records.length ||
+      !Number.isInteger(data.completedExecutions) || data.completedExecutions < 0 ||
+      data.completedExecutions > records.length || !finiteMetric(data.totalDurationMs, 300000)) {
+    throw invalid('Invalid execution records');
+  }
+  const target = new URL(task.targetUrl);
+  const safeRecords = records.map((record, index) => {
+    if (record?.execution !== index + 1 || typeof record.success !== 'boolean' ||
+        !Number.isInteger(record.statusCode) || !finiteMetric(record.statusCode, 599) ||
+        (record.latencyMs != null && !finiteMetric(record.latencyMs, 300000)) ||
+        (record.responseSizeBytes != null && !finiteMetric(record.responseSizeBytes, 1024 * 1024 * 1024)) ||
+        (record.downloadBandwidthMB != null && !finiteMetric(record.downloadBandwidthMB, 1024)) ||
+        (record.uploadBandwidthMB != null && !finiteMetric(record.uploadBandwidthMB, 1024))) {
+      throw invalid('Invalid execution record metrics');
+    }
+    let finalUrl = null;
+    if (record.finalUrl != null) {
+      if (typeof record.finalUrl !== 'string' || record.finalUrl.length > 2048) throw invalid('Invalid final URL');
+      let parsed;
+      try { parsed = new URL(record.finalUrl); } catch { throw invalid('Invalid final URL'); }
+      if (parsed.protocol !== target.protocol || parsed.host !== target.host || parsed.username || parsed.password) {
+        throw invalid('Final URL escaped the authorized target');
+      }
+      if ([...parsed.searchParams.keys()].some(key => /(?:token|api[_-]?key|password|secret|credential|signature|auth)/i.test(key))) {
+        throw invalid('Final URL contains credential-like parameters');
+      }
+      finalUrl = parsed.toString();
+    }
+    const startedAt = record.startedAt == null ? null : new Date(record.startedAt);
+    const completedAt = record.completedAt == null ? null : new Date(record.completedAt);
+    if ((startedAt && !Number.isFinite(startedAt.getTime())) ||
+        (completedAt && !Number.isFinite(completedAt.getTime()))) throw invalid('Invalid execution timestamp');
+    const evidence = record.serviceEvidence;
+    return {
+      execution: record.execution, startedAt: startedAt?.toISOString() ?? null,
+      completedAt: completedAt?.toISOString() ?? null, success: record.success,
+      statusCode: record.statusCode, finalUrl,
+      contentType: shortText(record.contentType, 200), latencyMs: record.latencyMs ?? null,
+      responseSizeBytes: record.responseSizeBytes ?? null,
+      downloadBandwidthMB: record.downloadBandwidthMB ?? null,
+      uploadBandwidthMB: record.uploadBandwidthMB ?? null,
+      serviceEvidence: evidence && typeof evidence === 'object' ? {
+        contentLanguage: shortText(evidence.contentLanguage, 100),
+        htmlLanguage: shortText(evidence.htmlLanguage, 100),
+        httpReachable: evidence.httpReachable === true,
+        httpSuccess: evidence.httpSuccess === true,
+        responseSizeBytes: finiteMetric(evidence.responseSizeBytes, 1024 * 1024 * 1024) ? evidence.responseSizeBytes : null,
+        durationMs: finiteMetric(evidence.durationMs, 300000) ? evidence.durationMs : null,
+      } : null,
+      error: safeError(record.error),
+    };
+  });
+  if (safeRecords.filter(record => record.success).length !== data.completedExecutions) {
+    throw invalid('Execution success count mismatch');
+  }
+  return {
+    schemaVersion: 2, serviceType: task.serviceType, method: task.method || 'GET',
+    targetRegion: task.targetRegion, nodeRegion: node.region,
+    requestedExecutions: task.executionLimit, attemptedExecutions: safeRecords.length,
+    completedExecutions: data.completedExecutions, totalDurationMs: data.totalDurationMs,
+    averageLatencyMs: finiteMetric(data.averageLatencyMs, 300000) ? data.averageLatencyMs : null,
+    totalResponseSizeBytes: finiteMetric(data.totalResponseSizeBytes, 1024 * 1024 * 1024) ? data.totalResponseSizeBytes : null,
+    packetLossMeasured: false, executions: safeRecords, error: safeError(data.error),
+  };
+};
+
 // Every persisted effect commits together. A crash cannot leave a result without
 // its reward, or a reward without its result. Mongo retries write conflicts.
 export const settleTaskResult = async (routingSessionId, payload) => {
@@ -46,6 +131,10 @@ export const settleTaskResult = async (routingSessionId, payload) => {
       !task.assignedNodeId || String(route.nodeId) !== String(task.assignedNodeId)) {
       throw invalid('Task result does not match RoutingSession identity bindings', 'BINDING_MISMATCH');
     }
+    if ((payload.routingSessionId && String(payload.routingSessionId) !== String(route._id)) ||
+        (payload.targetRegion && payload.targetRegion !== task.targetRegion)) {
+      throw invalid('Result payload does not match the assigned route', 'BINDING_MISMATCH');
+    }
     const existing = await TaskResult.findOne({ taskId: task._id }).session(transaction);
     if (existing) return { taskResult: existing, settled: false };
     if (!['assigned', 'running'].includes(task.status) || ['failed', 'expired', 'completed'].includes(route.status) ||
@@ -55,12 +144,19 @@ export const settleTaskResult = async (routingSessionId, payload) => {
     const node = await NodeDevice.findById(route.nodeId).session(transaction);
     if (!node) throw invalid('Node not found', 'NODE_NOT_FOUND');
     if (bandwidth + upload > Math.max(0, node.bandwidthLimitMB - node.usedBandwidthMB)) throw invalid('Bandwidth limit exceeded');
+    const resultData = validatedResultData(task, node, payload.resultData);
+    if (resultData.schemaVersion === 2 &&
+        (payload.success !== (resultData.completedExecutions === task.executionLimit &&
+          resultData.attemptedExecutions === task.executionLimit) ||
+         successRate !== Math.round(resultData.completedExecutions / task.executionLimit * 100))) {
+      throw invalid('Result summary does not match execution records');
+    }
 
     const [result] = await TaskResult.create([{
       taskId: task._id, clientId: task.clientId, nodeId: node._id, nodeUserId: node.userId,
       serviceType: task.serviceType, targetUrl: task.targetUrl, success: payload.success,
       successRate, latencyMs: latency, packetLoss, bandwidthUsedMB: bandwidth,
-      statusCode, resultData: payload.resultData ?? {}, completedAt: new Date(),
+      statusCode, resultData, completedAt: new Date(),
     }], { session: transaction });
     let reward = 0;
     if (payload.success) {
@@ -74,7 +170,7 @@ export const settleTaskResult = async (routingSessionId, payload) => {
       networkAvailability: 'available', timestamp: new Date() }], { session: transaction });
     task.status = payload.success ? 'settled' : 'failed';
     task.resultSummary = { successRate, averageResponseTimeMs: latency, bandwidthConsumedMB: bandwidth,
-      message: payload.success ? `Secure task completed. Reward: ${reward} credits.` : (payload.resultData?.error || 'Secure task failed') };
+      message: payload.success ? `Secure task completed. Reward: ${reward} credits.` : (resultData?.error || 'Secure task failed') };
     await task.save({ session: transaction });
     await TaskSession.updateOne({ taskId: task._id }, { $set: { status: payload.success ? 'completed' : 'failed',
       bandwidthUsedMB: bandwidth, latencyMs: latency }, $push: { logs: { message: task.resultSummary.message } } }, { session: transaction });

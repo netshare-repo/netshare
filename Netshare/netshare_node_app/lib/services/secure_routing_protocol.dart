@@ -137,6 +137,9 @@ class AuthorizedTaskRequest {
   final String authorizedMethod;
   final int timeoutMs;
   final int executionLimit;
+  final String serviceType;
+  final String targetRegion;
+  final Map<String, dynamic>? trafficPolicy;
 
   const AuthorizedTaskRequest({
     required this.taskId,
@@ -147,6 +150,9 @@ class AuthorizedTaskRequest {
     required this.authorizedMethod,
     required this.timeoutMs,
     this.executionLimit = 1,
+    this.serviceType = 'performance_testing',
+    this.targetRegion = '',
+    this.trafficPolicy,
   });
 
   factory AuthorizedTaskRequest.fromMessage(SecureRoutingMessage message) {
@@ -162,13 +168,16 @@ class AuthorizedTaskRequest {
     final method = p['authorizedMethod']?.toString().toUpperCase() ?? '';
     final timeout = (p['timeoutMs'] as num?)?.toInt() ?? 25000;
     final count = p['executionLimit'] ?? 1;
+    final serviceType = p['serviceType']?.toString() ?? 'performance_testing';
+    final targetRegion = p['targetRegion']?.toString() ?? '';
 
     if (taskId.isEmpty ||
         sessionId != message.sessionId ||
         targetUrl.isEmpty ||
         host.isEmpty ||
         port == null ||
-        !const {'GET', 'HEAD'}.contains(method) ||
+        method != 'GET' ||
+        !const {'accessibility_testing', 'performance_testing', 'localization_testing'}.contains(serviceType) ||
         timeout <= 0 ||
         timeout > 30000 ||
         count is! int ||
@@ -186,6 +195,11 @@ class AuthorizedTaskRequest {
       authorizedMethod: method,
       timeoutMs: timeout,
       executionLimit: count,
+      serviceType: serviceType,
+      targetRegion: targetRegion,
+      trafficPolicy: p['trafficPolicy'] is Map
+          ? Map<String, dynamic>.from(p['trafficPolicy'] as Map)
+          : null,
     );
   }
 }

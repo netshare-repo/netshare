@@ -105,6 +105,40 @@ describe('Phase 8 release security and replica-set acceptance', () => {
     expect(await Wallet.countDocuments({ userId: signup._id })).toBe(1);
     expect((await User.findById(signup._id)).isVerified).toBe(true);
   });
+  it('accepts the latest displayed development OTP after resend', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    const randomInt = vi.spyOn(crypto, 'randomInt')
+      .mockReturnValueOnce(123456).mockReturnValueOnce(654321);
+    try {
+      const email = `rc8_otp_resend_${Date.now()}@test.io`;
+      const created = await request(app).post('/api/auth/register').send({
+        name: 'RC OTP resend', email, password: 'TestPass1', role: 'node_participant',
+      });
+      expect(created.status).toBe(201);
+      expect(created.body.devOtp).toBe('123456');
+      userIds.push(created.body.userId);
+      expect((await request(app).post('/api/auth/register').send({
+        name: 'RC OTP duplicate', email, password: 'TestPass1', role: 'node_participant',
+      })).status).toBe(409);
+      await User.updateOne({ _id: created.body.userId }, {
+        lastOtpSentAt: new Date(Date.now() - 61000),
+      });
+      const resent = await request(app).post('/api/auth/resend-signup-otp').send({ email });
+      expect(resent.status).toBe(200);
+      expect(resent.body.devOtp).toBe('654321');
+      const stale = await request(app).post('/api/auth/verify-signup-otp')
+        .send({ email, otp: created.body.devOtp });
+      expect(stale.status).toBe(400);
+      expect(stale.body.message).toContain('latest code');
+      const verified = await request(app).post('/api/auth/verify-signup-otp')
+        .send({ email, otp: resent.body.devOtp });
+      expect(verified.status).toBe(200);
+      expect(await Wallet.countDocuments({ userId: created.body.userId })).toBe(1);
+    } finally {
+      randomInt.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
   it('rolls verification back if wallet creation fails', async () => {
     const signup = await User.create({ name: 'RC rollback', email: `rc8_signup_rollback_${Date.now()}@test.io`,
       password: 'fixture', role: 'platform_client', isVerified: false,

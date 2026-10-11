@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'vpn_service.dart';
@@ -13,6 +14,11 @@ class TaskExecutionResult {
   final int? packetLoss;
   final int successRate;
   final Map<String, dynamic> resultData;
+  final String? finalUrl;
+  final String? contentType;
+  final int? responseSizeBytes;
+  final DateTime? startedAt;
+  final DateTime? completedAt;
 
   TaskExecutionResult({
     required this.success,
@@ -24,6 +30,11 @@ class TaskExecutionResult {
     required this.packetLoss,
     required this.successRate,
     required this.resultData,
+    this.finalUrl,
+    this.contentType,
+    this.responseSizeBytes,
+    this.startedAt,
+    this.completedAt,
   });
 
   Map<String, dynamic> toMap(String taskId) {
@@ -38,12 +49,49 @@ class TaskExecutionResult {
       'packetLoss': packetLoss,
       'successRate': successRate,
       'resultData': resultData,
-      'completedAt': DateTime.now().toIso8601String(),
+      'completedAt': (completedAt ?? DateTime.now()).toUtc().toIso8601String(),
     };
   }
 }
 
 class TaskExecutorService {
+  static Map<String, dynamic> serviceEvidence({
+    required String serviceType,
+    required int statusCode,
+    required Map<String, String> headers,
+    required List<int> bodyBytes,
+    required int latencyMs,
+  }) {
+    if (serviceType == 'accessibility_testing') {
+      return {
+        'httpReachable': true,
+        'httpSuccess': statusCode >= 200 && statusCode < 400,
+      };
+    }
+    if (serviceType == 'performance_testing') {
+      return {'responseSizeBytes': bodyBytes.length, 'durationMs': latencyMs};
+    }
+    if (serviceType == 'localization_testing') {
+      final contentType = headers['content-type'];
+      String? htmlLanguage;
+      if (contentType?.toLowerCase().startsWith('text/html') == true) {
+        final sample = utf8.decode(
+          bodyBytes.take(16384).toList(),
+          allowMalformed: true,
+        );
+        htmlLanguage = RegExp(
+          r'<html\b[^>]*\blang\s*=\s*["\x27]([^"\x27]+)',
+          caseSensitive: false,
+        ).firstMatch(sample)?.group(1);
+      }
+      return {
+        'contentLanguage': headers['content-language'],
+        'htmlLanguage': htmlLanguage,
+      };
+    }
+    throw const FormatException('Unsupported test behavior');
+  }
+
   static const blockedHostnames = [
     'localhost',
     'metadata.google.internal',
@@ -103,10 +151,21 @@ class TaskExecutorService {
     if (!['http', 'https'].contains(uri.scheme.toLowerCase())) {
       return 'Unsupported protocol ${uri.scheme}. Only HTTP/HTTPS permitted.';
     }
+    if (uri.userInfo.isNotEmpty) {
+      return 'Target URL must not contain credentials';
+    }
+    if (uri.queryParameters.keys.any(
+      (key) => RegExp(
+        r'(token|api[_-]?key|password|secret|credential|signature|auth)',
+        caseSensitive: false,
+      ).hasMatch(key),
+    )) {
+      return 'Target URL must not contain credential-like query parameters';
+    }
 
     final method = (authorizedMethod ?? 'GET').toUpperCase();
-    if (!['GET', 'HEAD'].contains(method)) {
-      return 'Unauthorized HTTP method $method. Only GET/HEAD permitted.';
+    if (method != 'GET') {
+      return 'Unauthorized HTTP method $method. Only GET permitted.';
     }
 
     final host = uri.host.toLowerCase();
@@ -208,6 +267,7 @@ class TaskExecutorService {
   /// Executes an HTTP Performance test on the target URL
   static Future<TaskExecutionResult> executeHttpPerformanceTest(
     String targetUrl, {
+    String serviceType = 'performance_testing',
     int timeoutMs = 25000,
     String? authorizedHost,
     int? authorizedPort,
@@ -215,6 +275,13 @@ class TaskExecutorService {
     int maxRedirects = 3,
     bool requireTunForwarding = false,
   }) async {
+    if (!const {
+      'accessibility_testing',
+      'performance_testing',
+      'localization_testing',
+    }.contains(serviceType)) {
+      throw const FormatException('Unsupported test behavior');
+    }
     // 1. Independent node-side target validation
     final validationError = await validateTarget(
       targetUrl,
@@ -226,7 +293,7 @@ class TaskExecutorService {
     if (validationError != null) {
       return TaskExecutionResult(
         success: false,
-        statusCode: 403,
+        statusCode: 0,
         latencyMs: 0,
         bandwidthUsedMB: 0,
         downloadBandwidthMB: 0,
@@ -242,7 +309,7 @@ class TaskExecutorService {
       if (!status.isRunning || status.state != VpnState.connected) {
         return TaskExecutionResult(
           success: false,
-          statusCode: 503,
+          statusCode: 0,
           latencyMs: 0,
           bandwidthUsedMB: 0,
           downloadBandwidthMB: 0,
@@ -256,6 +323,7 @@ class TaskExecutorService {
       }
     }
 
+    final startedAt = DateTime.now().toUtc();
     final stopwatch = Stopwatch()..start();
 
     final client = http.Client();
@@ -303,7 +371,7 @@ class TaskExecutorService {
         if (redirectCount >= maxRedirects) {
           return TaskExecutionResult(
             success: false,
-            statusCode: 310,
+            statusCode: streamedResponse.statusCode,
             latencyMs: stopwatch.elapsedMilliseconds,
             bandwidthUsedMB: 0,
             downloadBandwidthMB: 0,
@@ -324,7 +392,7 @@ class TaskExecutorService {
         if (redirectError != null) {
           return TaskExecutionResult(
             success: false,
-            statusCode: 403,
+            statusCode: streamedResponse.statusCode,
             latencyMs: stopwatch.elapsedMilliseconds,
             bandwidthUsedMB: 0,
             downloadBandwidthMB: 0,
@@ -346,6 +414,7 @@ class TaskExecutorService {
       final latencyMs = stopwatch.elapsedMilliseconds;
       final bodySizeBytes = response.bodyBytes.length;
       final sizeMB = bodySizeBytes / (1024 * 1024);
+      final contentType = response.headers['content-type'];
 
       final packetsInDelta =
           ((tunAfter['packetsIn'] as num?) ?? 0) -
@@ -380,10 +449,22 @@ class TaskExecutorService {
         successRate: isSuccess ? 100 : 0,
         resultData: {
           'statusCode': response.statusCode,
+          'finalUrl': uri.toString(),
+          'contentType': contentType,
           'contentLengthBytes': bodySizeBytes,
           'latencyMs': latencyMs,
           'packetLossMeasured': false,
-          'headers': response.headers.sublistSafe(),
+          'serviceEvidence': serviceEvidence(
+            serviceType: serviceType,
+            statusCode: response.statusCode,
+            headers: response.headers,
+            bodyBytes: response.bodyBytes,
+            latencyMs: latencyMs,
+          ),
+          if (!isSuccess)
+            'error': !tunConfirmed && requireTunForwarding
+                ? 'Authorized TUN forwarding was not confirmed'
+                : 'HTTP status ${response.statusCode}',
           'tunForwarding': {
             'active': tunAfter['state'] == 'connected',
             'confirmed': tunConfirmed,
@@ -393,12 +474,17 @@ class TaskExecutorService {
             'bytesIn': tunAfter['bytesIn'],
           },
         },
+        finalUrl: uri.toString(),
+        contentType: contentType,
+        responseSizeBytes: bodySizeBytes,
+        startedAt: startedAt,
+        completedAt: DateTime.now().toUtc(),
       );
     } catch (e) {
       stopwatch.stop();
       return TaskExecutionResult(
         success: false,
-        statusCode: 500,
+        statusCode: 0,
         latencyMs: stopwatch.elapsedMilliseconds,
         bandwidthUsedMB: 0,
         downloadBandwidthMB: 0,
@@ -406,6 +492,8 @@ class TaskExecutorService {
         packetLoss: null,
         successRate: 0,
         resultData: {'error': e.toString()},
+        startedAt: startedAt,
+        completedAt: DateTime.now().toUtc(),
       );
     } finally {
       client.close();
@@ -424,6 +512,7 @@ class TaskExecutorService {
     }
     final elapsed = Stopwatch()..start();
     final results = <TaskExecutionResult>[];
+    final executionRecords = <Map<String, dynamic>>[];
     String? error;
     for (var index = 0; index < executionLimit; index++) {
       final remaining = timeoutMs - elapsed.elapsedMilliseconds;
@@ -431,11 +520,28 @@ class TaskExecutorService {
         error = 'Task deadline exceeded';
         break;
       }
+      final attemptStarted = DateTime.now().toUtc();
       try {
         final result = await execute(
           remaining,
         ).timeout(Duration(milliseconds: remaining));
         results.add(result);
+        executionRecords.add({
+          'execution': index + 1,
+          'startedAt': (result.startedAt ?? attemptStarted).toIso8601String(),
+          'completedAt': (result.completedAt ?? DateTime.now().toUtc())
+              .toIso8601String(),
+          'success': result.success,
+          'statusCode': result.statusCode,
+          'finalUrl': result.finalUrl,
+          'contentType': result.contentType,
+          'latencyMs': result.latencyMs,
+          'responseSizeBytes': result.responseSizeBytes,
+          'downloadBandwidthMB': result.downloadBandwidthMB,
+          'uploadBandwidthMB': result.uploadBandwidthMB,
+          'serviceEvidence': result.resultData['serviceEvidence'],
+          'error': result.resultData['error'],
+        });
         if (!result.success) {
           error =
               result.resultData['error']?.toString() ??
@@ -444,6 +550,14 @@ class TaskExecutorService {
         }
       } catch (failure) {
         error = failure.toString();
+        executionRecords.add({
+          'execution': index + 1,
+          'startedAt': attemptStarted.toIso8601String(),
+          'completedAt': DateTime.now().toUtc().toIso8601String(),
+          'success': false,
+          'statusCode': 0,
+          'error': error,
+        });
         break;
       }
     }
@@ -460,7 +574,7 @@ class TaskExecutorService {
     );
     return TaskExecutionResult(
       success: success,
-      statusCode: results.isEmpty ? 500 : results.last.statusCode,
+      statusCode: results.isEmpty ? 0 : results.last.statusCode,
       latencyMs: results.isEmpty
           ? 0
           : (results.fold<int>(0, (total, result) => total + result.latencyMs) /
@@ -472,14 +586,35 @@ class TaskExecutorService {
       packetLoss: null,
       successRate: (completed / executionLimit * 100).round(),
       resultData: {
+        'schemaVersion': 2,
         'requestedExecutions': executionLimit,
-        'attemptedExecutions': results.length,
+        'attemptedExecutions': executionRecords.length,
         'completedExecutions': completed,
+        'executions': executionRecords,
         'totalDurationMs': elapsed.elapsedMilliseconds,
+        'averageLatencyMs': results.isEmpty
+            ? null
+            : (results.fold<int>(
+                        0,
+                        (total, result) => total + result.latencyMs,
+                      ) /
+                      results.length)
+                  .round(),
+        'totalResponseSizeBytes': results.fold<int>(
+          0,
+          (total, result) => total + (result.responseSizeBytes ?? 0),
+        ),
         'packetLossMeasured': false,
         if (results.isNotEmpty) 'lastResponse': results.last.resultData,
         'error': ?error,
       },
+      finalUrl: results.isEmpty ? null : results.last.finalUrl,
+      contentType: results.isEmpty ? null : results.last.contentType,
+      responseSizeBytes: results.fold<int>(
+        0,
+        (total, result) => total + (result.responseSizeBytes ?? 0),
+      ),
+      completedAt: DateTime.now().toUtc(),
     );
   }
 

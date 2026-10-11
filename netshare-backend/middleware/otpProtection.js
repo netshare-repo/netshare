@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import { findIdentity } from '../services/identityService.js';
 import logger from '../lib/logger.js';
 
 const MAX_OTP_ATTEMPTS = 5;
@@ -14,7 +15,7 @@ export const checkOtpAttempts = async (req, res, next) => {
     const { email } = req.body;
     if (!email) return next();
     
-    const user = await User.findOne({ email });
+    const user = await findIdentity(email);
     if (!user) return next(); // Don't reveal user existence
     
     // Check lockout
@@ -70,7 +71,7 @@ export const checkResendCooldown = async (req, res, next) => {
     const { email } = req.body;
     if (!email) return next();
     
-    const user = await User.findOne({ email });
+    const user = await findIdentity(email);
     if (!user) return next();
     
     if (user.lastOtpSentAt) {

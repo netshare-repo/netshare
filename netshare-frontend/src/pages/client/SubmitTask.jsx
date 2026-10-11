@@ -10,6 +10,7 @@ function SubmitTask() {
 
   const [form, setForm] = useState({
     targetUrl: "",
+    method: "GET",
     serviceType: "accessibility_testing",
     targetRegion: "Pakistan",
     executionLimit: 5,
@@ -167,15 +168,15 @@ function SubmitTask() {
 
             <div className="form-group">
               <label>Service Type</label>
+              <p>HTTP method: GET only. Tests observe the HTTP response from the selected node region.</p>
               <select
                 name="serviceType"
                 value={form.serviceType}
                 onChange={handleChange}
               >
                 <option value="accessibility_testing">Accessibility Testing</option>
-                <option value="ad_verification">Ad Verification</option>
-                <option value="localization_testing">Localization Testing</option>
-                <option value="performance_testing">Performance Testing</option>
+                <option value="localization_testing">Localization response language</option>
+                <option value="performance_testing">HTTP response performance</option>
               </select>
             </div>
 
