@@ -194,7 +194,12 @@ void main() {
           bodyBytes: [1, 2, 3],
           latencyMs: 17,
         ),
-        {'responseSizeBytes': 3, 'durationMs': 17},
+        {
+          'httpReachable': true,
+          'httpSuccess': true,
+          'responseSizeBytes': 3,
+          'durationMs': 17,
+        },
       );
     },
   );

@@ -2,7 +2,7 @@
 
 ## Phase 10A — Real client task results (2026-10-11)
 
-Implemented GET-only accessibility (HTTP reachability), performance (GET duration/size), and localization (response language observations). Unsupported ad, UX, compliance, and other methods are rejected. Android DataChannel execution now carries actual per-execution records plus aggregate observations; backend validates/binds and persists them, with exactly-once transactional settlement. React and Flutter details and CSV read the persisted result. No response preview is returned. See [Phase 10A audit](PHASE10A_REAL_TASK_RESULTS.md). Physical Android network E2E remains unverified; this is not device certification.
+Implemented GET-only accessibility (HTTP reachability), performance (GET duration/size), and localization (response language observations). Unsupported ad, UX, compliance, and other methods are rejected. Android DataChannel execution now carries actual per-execution records plus aggregate observations; backend validates/binds and persists them, with exactly-once transactional settlement. React and Flutter details and CSV read the persisted result. No response preview is returned. See [Phase 10A audit](PHASE10A_REAL_TASK_RESULTS.md). Physical CPH2725 GET executions passed in Phase 10B; controlled endpoint egress logs and broader device/network coverage remain outstanding.
 
 ## Phase 9 — Release Blocker Closure (authoritative, 2026-10-09)
 
@@ -465,3 +465,7 @@ This includes all tracked items: official FRs plus infrastructure/system items.
 **Historical baseline only: ~66% items DONE; not recalculated after Phases 3–5.**
 
 > Historical infrastructure inventory only, not SRS completion. The Phase 8 authoritative register covers all 84 official FRs: 64 DONE / 20 PARTIAL (76.19%), with real-device and deployment limitations explicit.
+
+## Phase 10B — Physical Android task result acceptance (2026-10-12)
+
+On the physical CPH2725 / Android 15 / ADB `10b0eae2`, authorized GETs to example.com passed for one and three executions through WebRTC DataChannel, Android TUN relay, device-network upstream, persisted TaskResult, owner API, and CSV. A CPH2725 runtime `VpnService.protect(Socket)` rejection was fixed by binding to the previously captured physical network while VPN authorization remains valid. Performance HTTP evidence now reflects the observed status, and the node logs measured TUN deltas. Backend and Flutter targeted suites pass; Flutter analysis and Android debug build pass. Independent source-IP verification remains blocked because the controlled endpoint URL/log access was not supplied. Device clock skew and lack of client UI capture are recorded. This does not certify other devices, networks, or production deployment. See [Phase 10B physical E2E audit](PHASE10B_PHYSICAL_E2E.md).

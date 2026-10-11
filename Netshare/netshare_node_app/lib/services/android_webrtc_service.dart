@@ -328,7 +328,9 @@ class _AndroidRoutePeer {
       final status = await NetShareVpnBridge.getStatus();
       if (status.state == VpnState.connected &&
           status.isRunning &&
-          await NetShareVpnBridge.isNetworkReady()) return;
+          await NetShareVpnBridge.isNetworkReady()) {
+        return;
+      }
       if (status.state == VpnState.revoked) {
         throw StateError('Android VPN permission was revoked');
       }

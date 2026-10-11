@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'vpn_service.dart';
 
@@ -69,7 +70,12 @@ class TaskExecutorService {
       };
     }
     if (serviceType == 'performance_testing') {
-      return {'responseSizeBytes': bodyBytes.length, 'durationMs': latencyMs};
+      return {
+        'httpReachable': true,
+        'httpSuccess': statusCode >= 200 && statusCode < 400,
+        'responseSizeBytes': bodyBytes.length,
+        'durationMs': latencyMs,
+      };
     }
     if (serviceType == 'localization_testing') {
       final contentType = headers['content-type'];
@@ -425,6 +431,9 @@ class TaskExecutorService {
       final bytesOutDelta =
           ((tunAfter['bytesOut'] as num?) ?? 0) -
           ((tunBefore['bytesOut'] as num?) ?? 0);
+      final packetsOutDelta =
+          ((tunAfter['packetsOut'] as num?) ?? 0) -
+          ((tunBefore['packetsOut'] as num?) ?? 0);
       final downloadMB = requireTunForwarding
           ? bytesOutDelta.clamp(0, double.infinity) / (1024 * 1024)
           : sizeMB;
@@ -433,6 +442,11 @@ class TaskExecutorService {
           : 0.0;
 
       final tunConfirmed = packetsInDelta > 0 && bytesInDelta > 0;
+      debugPrint(
+        'Authorized task TUN counters: packetsInDelta=$packetsInDelta '
+        'packetsOutDelta=$packetsOutDelta bytesInDelta=$bytesInDelta '
+        'bytesOutDelta=$bytesOutDelta confirmed=$tunConfirmed',
+      );
       final isSuccess =
           response.statusCode >= 200 &&
           response.statusCode < 400 &&

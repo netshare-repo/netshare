@@ -6,6 +6,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -204,6 +207,7 @@ class NetShareVpnService : VpnService() {
     @Volatile private var authorizedMethod: String = ""
     @Volatile private var routingSessionId: String = ""
     @Volatile private var trafficPolicy: TrafficPolicy? = null
+    @Volatile private var upstreamNetwork: Network? = null
 
     private data class TcpFlowKey(
         val sourceIp: Int,
@@ -343,6 +347,21 @@ class NetShareVpnService : VpnService() {
                 builder.addRoute(ip, 32)
             }
 
+            // Capture the physical default network before establish() installs
+            // the VPN as the app's active network. The TCP relay binds upstream
+            // sockets to this device network so they cannot loop into tun0.
+            val connectivity = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val physicalNetwork = connectivity.activeNetwork
+                ?: throw IOException("No active device network for authorized upstream traffic")
+            val physicalCapabilities = connectivity.getNetworkCapabilities(physicalNetwork)
+                ?: throw IOException("Active device network capabilities are unavailable")
+            if (physicalCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ||
+                !physicalCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            ) {
+                throw IOException("Active network is not a physical Internet network")
+            }
+            upstreamNetwork = physicalNetwork
+
             val pfd = builder.establish()
             if (pfd == null) {
                 Log.e(TAG, "Builder.establish() returned null - permission may have been revoked")
@@ -353,6 +372,9 @@ class NetShareVpnService : VpnService() {
 
             vpnInterface = pfd
             activeInstance = this
+            if (!setUnderlyingNetworks(arrayOf(physicalNetwork))) {
+                throw IOException("Android rejected the physical network used for VPN upstream traffic")
+            }
 
             // Start TUN packet forwarder worker
             startTunForwarder(pfd)
@@ -484,7 +506,18 @@ class NetShareVpnService : VpnService() {
         private var upstreamReader: Thread? = null
 
         fun connect() {
-            if (!protect(socket)) throw IOException("Unable to protect upstream socket")
+            if (!protect(socket)) {
+                // Some device VPN implementations reject protect(Socket) even
+                // while this service remains authorized. Bind the same socket
+                // directly to the captured physical network as a safe fallback.
+                if (VpnService.prepare(this@NetShareVpnService) != null || activeInstance !== this@NetShareVpnService) {
+                    throw IOException("Unable to protect upstream socket; VPN authorization is unavailable")
+                }
+                val network = upstreamNetwork
+                    ?: throw IOException("Physical network for authorized upstream traffic is unavailable")
+                network.bindSocket(socket)
+                Log.w(TAG, "protect(Socket) rejected upstream socket; bound it to the authorized physical network")
+            }
             socket.tcpNoDelay = true
             socket.connect(InetSocketAddress(ipv4ToString(key.destinationIp), key.destinationPort), 10000)
             upstreamReader = Thread({ relayUpstreamToTun() }, "NetShareTcpUpstream-${key.sourcePort}").apply {
@@ -757,6 +790,7 @@ class NetShareVpnService : VpnService() {
             stopTunForwarder()
             vpnInterface = null
             activeInstance = null
+            upstreamNetwork = null
             allowedTargetIps = emptySet()
             allowedTargetIpStrings = emptySet()
         }
@@ -794,6 +828,7 @@ class NetShareVpnService : VpnService() {
         } finally {
             vpnInterface = null
             activeInstance = null
+            upstreamNetwork = null
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -817,6 +852,7 @@ class NetShareVpnService : VpnService() {
         } finally {
             vpnInterface = null
             activeInstance = null
+            upstreamNetwork = null
         }
         if (currentState != State.REVOKED) {
             notifyStateChanged(State.DISCONNECTED, currentRoutingScope)
