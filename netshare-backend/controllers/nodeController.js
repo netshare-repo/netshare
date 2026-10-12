@@ -43,16 +43,17 @@ export const getAvailableRegions = async (req, res) => {
       : DEFAULT_CLIENT_REGIONS;
     const regions = await getRegionAvailability(requested);
 
+    res.set("Cache-Control", "no-store");
     return res.json({
       generatedAt: new Date().toISOString(),
       eligibility:
-        "active + connected + free task slot + remaining bandwidth",
+        "active + connected + fresh heartbeat + healthy + free task slot + remaining bandwidth + authorized owner",
       regions,
     });
   } catch (error) {
+    logger.error({ err: error }, "Region availability lookup failed");
     return res.status(500).json({
       message: "Failed to fetch region availability",
-      error: error.message,
     });
   }
 };

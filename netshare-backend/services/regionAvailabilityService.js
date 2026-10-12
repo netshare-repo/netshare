@@ -1,5 +1,5 @@
 import NodeDevice from "../models/NodeDevice.js";
-import { isNodeConnected } from "./socketService.js";
+import { isAllocationEligible } from "./taskAllocationService.js";
 import { refreshDailyBudgets } from './trafficPolicyService.js';
 
 export const DEFAULT_CLIENT_REGIONS = Object.freeze([
@@ -22,8 +22,8 @@ const emptyRegion = (region) => ({
 });
 
 /**
- * Returns nodes that can accept a task now. A node must be active, have a free
- * execution slot and remaining bandwidth, and have a live control connection.
+ * Returns aggregate capacity for nodes that pass the allocator's eligibility
+ * checks and the owner authorization check performed when capacity is claimed.
  */
 export const getRegionAvailability = async (requestedRegions = []) => {
   await refreshDailyBudgets();
@@ -32,46 +32,52 @@ export const getRegionAvailability = async (requestedRegions = []) => {
     $expr: { $lt: ["$currentActiveTasks", "$maxConcurrentTasks"] },
   })
     .select(
-      "region bandwidthLimitMB usedBandwidthMB maxConcurrentTasks currentActiveTasks latencyMs reliabilityScore"
+      "userId status region bandwidthLimitMB usedBandwidthMB maxConcurrentTasks currentActiveTasks latencyMs reliabilityScore ratingCount healthScore lastSeenAt"
     )
+    .populate("userId", "status isVerified role")
     .lean();
 
   const grouped = new Map();
+  const now = Date.now();
+  const regionNames = requestedRegions.length
+    ? requestedRegions
+    : [...new Set(candidates.map((node) => node.region).filter(Boolean))];
 
-  for (const node of candidates) {
-    const bandwidthLimit = Number(node.bandwidthLimitMB || 0);
-    const usedBandwidth = Number(node.usedBandwidthMB || 0);
-    if (bandwidthLimit <= 0 || usedBandwidth >= bandwidthLimit) continue;
-    if (!isNodeConnected(node._id)) continue;
-
-    const key = normalizeRegion(node.region);
+  for (const region of regionNames) {
+    const key = normalizeRegion(region);
     if (!key) continue;
+    const eligibleNodes = candidates.filter((node) => {
+      const owner = node.userId;
+      const ownerCanParticipate = owner && owner.status === "active" &&
+        owner.isVerified === true && ["node_participant", "both"].includes(owner.role);
+      return ownerCanParticipate && isAllocationEligible(node, region, now);
+    });
+    if (eligibleNodes.length === 0) continue;
 
-    const current = grouped.get(key) || {
-      region: node.region.trim(),
-      eligibleNodes: 0,
+    const current = {
+      region: eligibleNodes[0].region.trim(),
+      eligibleNodes: eligibleNodes.length,
       availableSlots: 0,
       latencyTotal: 0,
       latencySamples: 0,
       reliabilityTotal: 0,
+      reliabilitySamples: 0,
     };
 
-    current.eligibleNodes += 1;
-    current.availableSlots += Math.max(
-      0,
-      Number(node.maxConcurrentTasks || 1) - Number(node.currentActiveTasks || 0)
-    );
-    if (Number.isFinite(node.latencyMs) && node.latencyMs >= 0) {
-      current.latencyTotal += node.latencyMs;
-      current.latencySamples += 1;
+    for (const node of eligibleNodes) {
+      current.availableSlots += Number(node.maxConcurrentTasks) - Number(node.currentActiveTasks);
+      if (Number.isFinite(node.latencyMs) && node.latencyMs >= 0) {
+        current.latencyTotal += node.latencyMs;
+        current.latencySamples += 1;
+      }
+      // The model starts at 100; do not present that default as a measured score.
+      if (Number(node.ratingCount) > 0 && Number.isFinite(node.reliabilityScore)) {
+        current.reliabilityTotal += node.reliabilityScore;
+        current.reliabilitySamples += 1;
+      }
     }
-    current.reliabilityTotal += Number(node.reliabilityScore ?? 100);
     grouped.set(key, current);
   }
-
-  const regionNames = requestedRegions.length
-    ? requestedRegions
-    : [...grouped.values()].map((entry) => entry.region);
 
   return regionNames.map((region) => {
     const current = grouped.get(normalizeRegion(region));
@@ -86,9 +92,9 @@ export const getRegionAvailability = async (requestedRegions = []) => {
         current.latencySamples > 0
           ? Math.round(current.latencyTotal / current.latencySamples)
           : null,
-      averageReliability: Number(
-        (current.reliabilityTotal / current.eligibleNodes).toFixed(2)
-      ),
+      averageReliability: current.reliabilitySamples > 0
+        ? Number((current.reliabilityTotal / current.reliabilitySamples).toFixed(2))
+        : null,
     };
   });
 };

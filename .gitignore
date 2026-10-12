@@ -28,7 +28,10 @@ Thumbs.db
 # Docker volumes
 secrets/
 mongo_data/
+local-backups/
 .phase9-mongo/
+.phase10b-mongo/
+.phase10b-screen.png
 redis_data/
 
 # Coverage

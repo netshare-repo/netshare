@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Send, Globe2, MapPin, Zap } from "lucide-react";
 import axiosInstance from "../../api/axiosInstance";
 import ClientLayout from "../../layouts/ClientLayout";
+import RegionAvailabilityPanel from "../../components/client/RegionAvailabilityPanel";
+import { useRegionAvailability } from "../../hooks/useRegionAvailability";
 import "./SubmitTask.css";
 
 function SubmitTask() {
@@ -19,35 +21,15 @@ function SubmitTask() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [availability, setAvailability] = useState([]);
+  const availability = useRegionAvailability();
   const [pricing, setPricing] = useState(null);
-  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteLoading, setQuoteLoading] = useState(true);
+  const [quoteError, setQuoteError] = useState("");
+  const [quoteRetry, setQuoteRetry] = useState(0);
   const hasValidExecutionLimit =
     Number.isInteger(Number(form.executionLimit)) &&
     Number(form.executionLimit) >= 1 &&
     Number(form.executionLimit) <= 100;
-
-  const selectedAvailability = useMemo(
-    () =>
-      availability.find(
-        (item) => item.region.toLowerCase() === form.targetRegion.toLowerCase()
-      ),
-    [availability, form.targetRegion]
-  );
-
-  useEffect(() => {
-    const loadAvailability = async () => {
-      try {
-        const res = await axiosInstance.get("/node/availability", {
-          params: { regions: "Pakistan,UAE,USA,UK,India" },
-        });
-        setAvailability(res.data.regions || []);
-      } catch {
-        setAvailability([]);
-      }
-    };
-    loadAvailability();
-  }, []);
 
   useEffect(() => {
     const limit = Number(form.executionLimit);
@@ -64,15 +46,16 @@ function SubmitTask() {
           { targetRegion: form.targetRegion, executionLimit: limit },
           { signal: controller.signal }
         );
+        if (!Number.isFinite(res.data?.quote?.totalCredits) || res.data.quote.totalCredits < 1) {
+          throw new Error("Invalid price estimate");
+        }
         setPricing(res.data.quote);
-        setAvailability((current) => {
-          const next = current.filter(
-            (item) => item.region.toLowerCase() !== form.targetRegion.toLowerCase()
-          );
-          return [...next, res.data.availability];
-        });
+        setQuoteError("");
       } catch (requestError) {
-        if (requestError.code !== "ERR_CANCELED") setPricing(null);
+        if (requestError.code !== "ERR_CANCELED") {
+          setPricing(null);
+          setQuoteError(requestError.response?.data?.message || "Price estimate could not be loaded.");
+        }
       } finally {
         if (!controller.signal.aborted) setQuoteLoading(false);
       }
@@ -82,9 +65,15 @@ function SubmitTask() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [form.executionLimit, form.targetRegion]);
+  }, [form.executionLimit, form.targetRegion, quoteRetry]);
 
   const handleChange = (e) => {
+    if (e.target.name === "targetRegion" || e.target.name === "executionLimit") {
+      setPricing(null);
+      setQuoteError("");
+      const nextLimit = e.target.name === "executionLimit" ? Number(e.target.value) : Number(form.executionLimit);
+      setQuoteLoading(Number.isInteger(nextLimit) && nextLimit >= 1 && nextLimit <= 100);
+    }
     setForm({
       ...form,
       [e.target.name]: e.target.value,
@@ -93,13 +82,29 @@ function SubmitTask() {
 
   const handleSubmitTask = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setMessage("");
     setError("");
+    if (!pricing || quoteLoading || !hasValidExecutionLimit) {
+      setError("Wait for a valid price estimate before submitting.");
+      return;
+    }
+    let targetUrl;
+    try {
+      targetUrl = new URL(form.targetUrl.trim());
+      if (!["http:", "https:"].includes(targetUrl.protocol) || targetUrl.username || targetUrl.password) {
+        throw new Error("Invalid task URL");
+      }
+    } catch {
+      setError("Enter a public HTTP or HTTPS URL without embedded credentials.");
+      return;
+    }
     setLoading(true);
 
     try {
       const res = await axiosInstance.post("/tasks", {
         ...form,
+        targetUrl: targetUrl.toString(),
         executionLimit: Number(form.executionLimit),
       });
 
@@ -109,7 +114,8 @@ function SubmitTask() {
         navigate("/client/tasks");
       }, 1200);
     } catch (err) {
-      setError(err.response?.data?.message || "Task submission failed");
+      setError(err.response?.data?.message ||
+        (err.response ? "Task submission failed. Please retry." : "Cannot reach the backend. Check its connection and retry."));
     } finally {
       setLoading(false);
     }
@@ -150,8 +156,17 @@ function SubmitTask() {
           <form className="submit-form-card" onSubmit={handleSubmitTask}>
             {message && <div className="success-alert">{message}</div>}
             {error && <div className="error-alert">{error}</div>}
+            {quoteError && (
+              <div className="error-alert" role="status">
+                {quoteError}{" "}
+                <button type="button" className="quote-retry-btn" onClick={() => {
+                  setQuoteLoading(true);
+                  setQuoteRetry((value) => value + 1);
+                }}>Retry estimate</button>
+              </div>
+            )}
 
-            <div className="form-group">
+            <div className="task-field">
               <label>Target URL</label>
               <div className="input-icon-box">
                 <Globe2 size={18} />
@@ -166,7 +181,7 @@ function SubmitTask() {
               </div>
             </div>
 
-            <div className="form-group">
+            <div className="task-field">
               <label>Service Type</label>
               <p>HTTP method: GET only. Tests observe the HTTP response from the selected node region.</p>
               <select
@@ -180,7 +195,7 @@ function SubmitTask() {
               </select>
             </div>
 
-            <div className="form-group">
+            <div className="task-field">
               <label>Target Region</label>
               <div className="input-icon-box">
                 <MapPin size={18} />
@@ -196,23 +211,20 @@ function SubmitTask() {
                   <option value="India">India</option>
                 </select>
               </div>
-              <div
-                className={`availability-indicator ${
-                  selectedAvailability?.available ? "available" : "unavailable"
-                }`}
-              >
-                <span className="availability-dot" />
-                {selectedAvailability?.available
-                  ? `${selectedAvailability.eligibleNodes} eligible node${
-                      selectedAvailability.eligibleNodes === 1 ? "" : "s"
-                    } · ${selectedAvailability.availableSlots} open slot${
-                      selectedAvailability.availableSlots === 1 ? "" : "s"
-                    }`
-                  : "No eligible connected nodes in this region right now"}
-              </div>
             </div>
 
-            <div className="form-group">
+            <RegionAvailabilityPanel
+              compact
+              selectedRegion={form.targetRegion}
+              availability={availability.regions}
+              loading={availability.loading}
+              refreshing={availability.refreshing}
+              error={availability.error}
+              lastUpdated={availability.lastUpdated}
+              stale={availability.stale}
+            />
+
+            <div className="task-field">
               <label>Execution Limit</label>
               <div className="input-icon-box">
                 <Zap size={18} />
@@ -233,7 +245,7 @@ function SubmitTask() {
               </small>
             </div>
 
-            <button className="submit-task-btn" type="submit" disabled={loading}>
+            <button className="submit-task-btn" type="submit" disabled={loading || quoteLoading || !pricing || !hasValidExecutionLimit}>
               {loading ? "Submitting..." : "Submit Task"}
               <Send size={18} />
             </button>

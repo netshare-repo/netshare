@@ -10,6 +10,8 @@ import {
 import { Link } from "react-router-dom";
 import axiosInstance from "../../api/axiosInstance";
 import ClientLayout from "../../layouts/ClientLayout";
+import RegionAvailabilityPanel from "../../components/client/RegionAvailabilityPanel";
+import { useRegionAvailability } from "../../hooks/useRegionAvailability";
 import "./ClientDashboard.css";
 
 function ClientDashboard() {
@@ -22,6 +24,7 @@ function ClientDashboard() {
   const [tasks, setTasks] = useState([]);
   const [wallet, setWallet] = useState(null);
   const [loading, setLoading] = useState(true);
+  const availability = useRegionAvailability();
 
   const fetchDashboardData = async () => {
     try {
@@ -79,6 +82,14 @@ function ClientDashboard() {
     return (
       <ClientLayout>
         <div className="client-loading">Loading dashboard...</div>
+        <RegionAvailabilityPanel
+          availability={availability.regions}
+          loading={availability.loading}
+          refreshing={availability.refreshing}
+          error={availability.error}
+          lastUpdated={availability.lastUpdated}
+          stale={availability.stale}
+        />
       </ClientLayout>
     );
   }
@@ -121,6 +132,15 @@ function ClientDashboard() {
             );
           })}
         </div>
+
+        <RegionAvailabilityPanel
+          availability={availability.regions}
+          loading={availability.loading}
+          refreshing={availability.refreshing}
+          error={availability.error}
+          lastUpdated={availability.lastUpdated}
+          stale={availability.stale}
+        />
 
         <div className="dashboard-grid">
           <div className="tasks-panel">

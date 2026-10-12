@@ -102,14 +102,12 @@ app.use('/health', healthRoutes);
 
 // Legacy health endpoint (backward compatibility)
 app.get('/api/health', (req, res) => {
-  const connectedNodes = getConnectedNodesList();
   res.json({
     status: 'online',
     timestamp: new Date().toISOString(),
     executionPlane: {
       socketServer: 'active',
-      connectedNodesCount: connectedNodes.length,
-      connectedNodes,
+      connectedNodesCount: getConnectedNodesList().length,
     },
   });
 });

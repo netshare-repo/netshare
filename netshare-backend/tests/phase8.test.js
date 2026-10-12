@@ -107,6 +107,7 @@ describe('Phase 8 release security and replica-set acceptance', () => {
   });
   it('accepts the latest displayed development OTP after resend', async () => {
     vi.stubEnv('NODE_ENV', 'development');
+    vi.stubEnv('DEV_SKIP_OTP_VERIFICATION', 'false');
     const randomInt = vi.spyOn(crypto, 'randomInt')
       .mockReturnValueOnce(123456).mockReturnValueOnce(654321);
     try {

@@ -13,8 +13,12 @@ import { enqueueTask } from "../services/taskQueueService.js";
 import { calculateReward } from "../services/rewardService.js";
 import BandwidthUsage from "../models/BandwidthUsage.js";
 import { estimateTaskPrice } from "../services/pricingService.js";
-import { runTransaction } from '../lib/mongoTransaction.js';
+import { runTransaction, supportsMongoTransactions } from '../lib/mongoTransaction.js';
 import { validateTarget } from '../services/targetValidationService.js';
+import logger from '../lib/logger.js';
+
+const TRANSACTIONS_UNAVAILABLE_MESSAGE =
+  'Task submission is unavailable until MongoDB is configured as a replica set.';
 
 const isValidUrl = (url) => {
   try {
@@ -68,6 +72,10 @@ export const createTask = async (req, res) => {
     }
     const targetCheck = await validateTarget(targetUrl);
     if (!targetCheck.valid) return res.status(400).json({ message: `Target rejected: ${targetCheck.reason}` });
+
+    if (!supportsMongoTransactions()) {
+      return res.status(503).json({ message: TRANSACTIONS_UNAVAILABLE_MESSAGE });
+    }
 
     const pricing = await estimateTaskPrice({
       targetRegion,
@@ -133,9 +141,13 @@ export const createTask = async (req, res) => {
       pricing,
     });
   } catch (error) {
-    return res.status(500).json({
-      message: "Task creation failed",
-      error: error.message,
+    if (error.status === 503) {
+      return res.status(503).json({ message: TRANSACTIONS_UNAVAILABLE_MESSAGE });
+    }
+    logger.error({ err: error }, 'Task creation failed');
+    const status = [400, 403, 409].includes(error.status) ? error.status : 500;
+    return res.status(status).json({
+      message: status === 500 ? 'Task creation failed. Please retry later.' : error.message,
     });
   }
 };

@@ -124,6 +124,11 @@ afterAll(async () => {
 });
 
 describe("Phase 3: deterministic pricing and availability", () => {
+  it("does not expose node identities through the public health endpoint", async () => {
+    const response = await request(app).get("/api/health").expect(200);
+    expect(response.body.executionPlane).toHaveProperty("connectedNodesCount");
+    expect(response.body.executionPlane).not.toHaveProperty("connectedNodes");
+  });
   it("calculates the same explainable price for identical inputs", () => {
     const input = {
       executionLimit: 10,
@@ -175,6 +180,7 @@ describe("Phase 3: deterministic pricing and availability", () => {
     expect(availability.body.regions).toHaveLength(2);
     expect(availability.body.regions[0]).toHaveProperty("eligibleNodes");
     expect(availability.body.eligibility).toContain("connected");
+    expect(availability.headers["cache-control"]).toBe("no-store");
   });
 
   it("protects availability and validates estimate input", async () => {
