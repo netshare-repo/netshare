@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Search, RefreshCw, ShieldBan, ShieldCheck } from "lucide-react";
 import AdminLayout from "../../layouts/AdminLayout";
 import { getAdminUsers, getAdminUserDetails, restrictUser, blockUser, unblockUser } from "../../api/adminApi";
+import AdminPagination from "./AdminPagination";
 import "./ManageUsers.css";
 
 function ManageUsers() {
@@ -10,6 +11,9 @@ function ManageUsers() {
   const [updatingId, setUpdatingId] = useState("");
   const [message, setMessage] = useState("");
   const [details, setDetails] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalUsers, setTotalUsers] = useState(0);
   const showDetails = async (id) => {
     setDetails(null);
     setUpdatingId(id);
@@ -38,20 +42,24 @@ function ManageUsers() {
       setLoading(true);
       
       const queryParams = { ...filters };
+      queryParams.page = page;
+      queryParams.limit = pageSize;
       Object.keys(queryParams).forEach(k => {
         if (!queryParams[k]) delete queryParams[k];
       });
 
       const data = await getAdminUsers(queryParams);
       setUsers(data.users || []);
+      setTotalUsers(data.total ?? data.users?.length ?? 0);
     } catch (error) {
       setMessage(error.response?.data?.message || "Failed to load users");
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, page, pageSize]);
 
   const handleFilterChange = (e) => {
+    setPage(1);
     setFilters({ ...filters, [e.target.name]: e.target.value });
   };
 
@@ -92,7 +100,7 @@ function ManageUsers() {
             <p>View, filter, and manage platform users.</p>
           </div>
 
-          <button onClick={loadUsers}>
+          <button onClick={() => { if (page === 1) void loadUsers(); else setPage(1); }}>
             <RefreshCw size={18} />
             Refresh
           </button>
@@ -151,6 +159,7 @@ function ManageUsers() {
           {details.audit.map(log => <p key={log._id}>{log.action} · {log.details} · {new Date(log.createdAt).toLocaleString()}</p>)}
         </section>}
 
+        {!loading && <AdminPagination page={page} pageSize={pageSize} total={totalUsers} onPageChange={setPage} onPageSizeChange={setPageSize} />}
         {loading ? (
           <div className="mu-empty">Loading users...</div>
         ) : users.length === 0 ? (

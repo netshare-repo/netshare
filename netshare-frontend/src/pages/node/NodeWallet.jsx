@@ -6,9 +6,11 @@ import {
   Award,
   ArrowDownLeft,
   ArrowUpRight,
+  ArrowUpFromLine,
   Store,
   Calendar,
   Receipt,
+  X,
 } from "lucide-react";
 import NodeLayout from "../../layouts/NodeLayout";
 import StatsCard from "../../components/common/StatsCard";
@@ -28,6 +30,7 @@ function NodeWallet() {
   const [withdrawalForm, setWithdrawalForm] = useState({ amount: "", method: "bank_transfer", accountDetails: "" });
   const [withdrawalMessage, setWithdrawalMessage] = useState("");
   const [withdrawalBusy, setWithdrawalBusy] = useState(false);
+  const [withdrawalOpen, setWithdrawalOpen] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -66,6 +69,7 @@ function NodeWallet() {
       setWithdrawalMessage("Withdrawal submitted. Eligible credits are reserved while an admin reviews it.");
       setWithdrawalForm({ amount: "", method: "bank_transfer", accountDetails: "" });
       await fetchData();
+      setWithdrawalOpen(false);
     } catch (err) {
       setWithdrawalMessage(err.response?.data?.message || "Withdrawal request failed");
     } finally {
@@ -121,20 +125,93 @@ function NodeWallet() {
           />
         </div>
 
+        <section className="withdrawal-action-card">
+          <div className="withdrawal-action-copy">
+            <span className="withdrawal-eyebrow">AVAILABLE TO WITHDRAW</span>
+            <strong>{eligibleBalance} credits</strong>
+            <p>Only eligible task earnings can be withdrawn. Requests are reviewed by the platform team.</p>
+            {withdrawalMessage && <p className="withdrawal-feedback" role="status">{withdrawalMessage}</p>}
+          </div>
+          <button
+            type="button"
+            className="withdrawal-open-btn"
+            onClick={() => { setWithdrawalMessage(""); setWithdrawalOpen(true); }}
+            disabled={eligibleBalance <= 0}
+          >
+            <ArrowUpFromLine size={16} /> Withdraw
+          </button>
+        </section>
+
         <div className="wallet-ledger-card payment-panel">
-          <h3>Request a Withdrawal</h3>
-          <p>Eligible earned credits: {eligibleBalance}. Demo and top-up credits cannot be withdrawn. Payouts are manually verified and processed by an admin.</p>
-          <form className="payment-form" onSubmit={submitWithdrawal}>
-            <label>Credits to withdraw<input type="number" min="1" max="1000000" step="1" required value={withdrawalForm.amount} onChange={(event) => setWithdrawalForm({ ...withdrawalForm, amount: event.target.value })} /></label>
-            <label>Method<select value={withdrawalForm.method} onChange={(event) => setWithdrawalForm({ ...withdrawalForm, method: event.target.value })}><option value="bank_transfer">Bank transfer</option><option value="easypaisa">Easypaisa</option><option value="jazzcash">JazzCash</option></select></label>
-            <label>Account details<input required minLength="5" maxLength="120" autoComplete="off" value={withdrawalForm.accountDetails} onChange={(event) => setWithdrawalForm({ ...withdrawalForm, accountDetails: event.target.value })} /></label>
-            <button type="submit" disabled={withdrawalBusy}>{withdrawalBusy ? "Submitting..." : "Request withdrawal"}</button>
-          </form>
-          {withdrawalMessage && <p role="status">{withdrawalMessage}</p>}
-          <h3>Withdrawal History</h3>
-          {withdrawals.length === 0 ? <p>No withdrawal requests yet.</p> : <ul className="payment-history">{withdrawals.map((item) => <li key={item._id}>{item.amount} credits · {item.method} · {item.status}{item.adminNote ? ` · ${item.adminNote}` : ""}</li>)}</ul>}
+          <div className="ledger-header">
+            <div className="ledger-title-wrap">
+              <Receipt size={18} className="title-icon" />
+              <h3>Withdrawal History</h3>
+            </div>
+            <span className="total-tx-pill">{withdrawals.length} Requests</span>
+          </div>
+          {withdrawals.length === 0 ? (
+            <p className="withdrawal-empty">No withdrawal requests yet.</p>
+          ) : (
+            <ul className="payment-history">
+              {withdrawals.map((item) => (
+                <li key={item._id}>
+                  <strong>{item.amount} credits</strong>
+                  <span>{item.method.replaceAll("_", " ")}</span>
+                  <span className={`withdrawal-status ${item.status}`}>{item.status}</span>
+                  {item.adminNote && <small>{item.adminNote}</small>}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
+        {withdrawalOpen && (
+          <div
+            className="withdrawal-modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setWithdrawalOpen(false);
+            }}
+          >
+            <section className="withdrawal-modal" role="dialog" aria-modal="true" aria-labelledby="withdrawal-modal-title">
+              <div className="withdrawal-modal-header">
+                <div>
+                  <span className="withdrawal-eyebrow">PAYOUT REQUEST</span>
+                  <h2 id="withdrawal-modal-title">Withdraw credits</h2>
+                  <p>{eligibleBalance} eligible credits available</p>
+                </div>
+                <button type="button" className="withdrawal-close-btn" aria-label="Close withdrawal form" onClick={() => setWithdrawalOpen(false)}>
+                  <X size={18} />
+                </button>
+              </div>
+              <form className="payment-form withdrawal-form" onSubmit={submitWithdrawal}>
+                <label>
+                  Credits to withdraw
+                  <input type="number" min="1" max={eligibleBalance} step="1" required value={withdrawalForm.amount} onChange={(event) => setWithdrawalForm({ ...withdrawalForm, amount: event.target.value })} />
+                </label>
+                <label>
+                  Payment method
+                  <select value={withdrawalForm.method} onChange={(event) => setWithdrawalForm({ ...withdrawalForm, method: event.target.value })}>
+                    <option value="bank_transfer">Bank transfer</option>
+                    <option value="easypaisa">Easypaisa</option>
+                    <option value="jazzcash">JazzCash</option>
+                  </select>
+                </label>
+                <label>
+                  Account details
+                  <input required minLength="5" maxLength="120" autoComplete="off" placeholder="Account number or wallet details" value={withdrawalForm.accountDetails} onChange={(event) => setWithdrawalForm({ ...withdrawalForm, accountDetails: event.target.value })} />
+                </label>
+                {withdrawalMessage && <p className="withdrawal-feedback" role="alert">{withdrawalMessage}</p>}
+                <div className="withdrawal-modal-actions">
+                  <button type="button" className="withdrawal-cancel-btn" onClick={() => setWithdrawalOpen(false)}>Cancel</button>
+                  <button type="submit" className="withdrawal-submit-btn" disabled={withdrawalBusy || eligibleBalance <= 0}>
+                    {withdrawalBusy ? "Submitting..." : "Submit withdrawal"}
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
         {/* Marketplace Promotion Banner */}
         <div className="marketplace-promo-banner">
           <div className="promo-text">
@@ -148,7 +225,7 @@ function NodeWallet() {
             </div>
           </div>
 
-          <Link to="/client/marketplace" className="browse-marketplace-btn">
+          <Link to="/node/marketplace" className="browse-marketplace-btn">
             Browse Marketplace <ArrowUpRight size={16} />
           </Link>
         </div>

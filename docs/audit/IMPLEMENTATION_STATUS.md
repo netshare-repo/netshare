@@ -1,5 +1,107 @@
 # NetShare — Implementation Status
 
+## Phase 13A - Regional uptime monitoring (2026-10-15)
+
+Added a backend-only `REGIONAL_UPTIME_MONITOR` service with a feature flag disabled by default. Authenticated clients can define public HTTPS/443 checks by region, expected status, bounded interval/run count, and a prepaid credit budget. A Mongo-backed scheduler atomically reserves each run and creates one ordinary `performance_testing` GET task, which follows the existing task allocation and secure WebRTC/VpnService/TUN route. The backend does not fetch monitored sites. Mongo unique indexes, a one-run in-flight limit, durable queue reconciliation, transaction settlement, and idempotency keys prevent duplicate execution and billing. Run history records timestamps, status, latency, success/failure and errors; uptime includes no-response failures as downtime.
+
+- API: `POST/GET /api/uptime-monitors`, `GET/DELETE /api/uptime-monitors/:id`; all owner-scoped and restricted to client roles. Monitor creation requires `Idempotency-Key` and reserves the authorized budget; cancellation stops new probes and refunds unused credits.
+- Phase 13A focused tests **6/6 PASS**. Full backend regression **265/265 PASS across 20 files** on an isolated local replica-set database, with the feature flag off. Ordinary task routing/settlement regression **20/20 PASS**.
+- Physical Android tests remain deferred. No client UI was added. See [Phase 13A audit](PHASE13A_REGIONAL_UPTIME_MONITORING.md) for bounds, API payloads, accounting rules, and activation gates.
+
+## Phase 12F - Browser egress solution (2026-10-15)
+
+Reviewed Phase 12A-12E audits and the current Android VPN/TUN, WebRTC dispatch, browser executor, and resource policy. Selected a separate browser APK in a dedicated managed work profile, with its own profile-scoped always-on lockdown VPN and a native, task-scoped egress broker. This is the strongest defensible on-device target that preserves the existing personal-profile node VPN and WebRTC routes. Android supplies per-app VPN and profile-owner lockdown building blocks, but the current node app has neither a managed browser profile nor a proven Chromium host/renderer routing boundary.
+
+- No networked browser prototype was safe to implement without the managed profile and physical Android verification. No production code, routes, flags, task behavior, or UI were changed. The browser task remains fail-closed before network activity.
+- Architecture audit compares shared-app full-tunnel, ordinary per-app VPN, managed-profile broker, and remote Chromium options; it defines deny-by-default handling and an implementation/test roadmap. See [Phase 12F audit](PHASE12F_BROWSER_EGRESS_SOLUTION.md).
+- Browser focused tests **8/8 PASS**; full Flutter tests **100/100 PASS**; Flutter analysis clean; Android arm64 debug APK **PASS**. No physical device test was run. Backend flag default and Android rendering latch remain off.
+- Readiness: **BLOCKED** pending managed-profile prototype, renderer/UID routing proof, full IPv4/IPv6/DNS/UDP/redirect/subresource/VPN-loss instrumentation tests on physical Android, and production screenshot storage. If managed profiles cannot be required, evaluate the remote Chromium plus authenticated node egress tunnel as a separately approved product/privacy architecture. Ad Verification remains out of scope.
+
+## Phase 12E — Browser task client UI (2026-10-15)
+
+Prepared React and Flutter client forms and task-detail viewers for the persisted `BROWSER_PAGE_INSPECT` v1 contract. Both forms use the authenticated backend capability; with the capability false they show **Coming Soon**, disable the prepared viewport/timeout/screenshot controls, and block submission. Future enabled submissions reuse the existing target URL, region, quote, and task APIs. Result details display bounded page metadata, metrics, rendered text, and errors as inert text. Screenshot bytes are fetched only through the existing authenticated owner endpoint and checked before preview/download; upload grants and storage paths are never exposed. No browser execution, WebView, WebRTC, VPN, or settlement behavior changed.
+
+- Backend **259/259 PASS** with experimental flags disabled; React **9/9 helper tests PASS**, build/lint PASS; Flutter **100/100 PASS**, analysis clean.
+- Android arm64 debug APK: **PASS** at `Netshare/netshare_node_app/build/app/outputs/flutter-apk/app-debug.apk`.
+- Browser feature flag and readiness latches remain disabled. Networked rendering remains blocked pending the Phase 12D egress boundary and deferred device verification.
+
+See [Phase 12E audit](PHASE12E_BROWSER_TASK_CLIENT_UI.md).
+
+## Phase 12D — Secure browser egress (2026-10-15)
+
+Audited the Android TUN/VpnService, WebRTC dispatch, and browser resource policy. The current VPN includes the node app, installs only the task subnet and authorized IPv4 target `/32` routes, has no default/IPv6 route or VPN DNS configuration, and forwards IPv4 TCP only. Chromium DNS, changed-host redirects, third-party resources, service-worker traffic, WebSockets, QUIC/UDP and other destinations are therefore not demonstrably contained by this TUN. A broad route in the shared app identity could also capture existing WebRTC/control and task sockets, which the current TUN cannot safely forward. No route or network fallback change was made.
+
+The browser task still fails before DNS, VPN startup, WebView creation, or socket activity. Backend flag and backend/Android readiness latches remain disabled. Added a regression that checks navigation, redirect, subresource and service-worker requests are rejected before DNS while task-scoped egress is unavailable. Dart tests cannot prove physical Chromium/TUN containment; physical verification remains deferred.
+
+- Phase 12D audit: [secure browser egress](PHASE12D_SECURE_BROWSER_EGRESS.md).
+- Focused browser egress tests **8/8 PASS**; Flutter **97/97 PASS** and analysis clean; Android arm64 debug APK **PASS**; backend **259/259 PASS across 19 files** on an isolated local replica-set database with both experimental flags disabled. An initial shared-database backend run collided with stale Phase 9 legacy phone fixtures; the isolated full run passed.
+- Readiness: **BLOCKED** until a platform-enforced, task-scoped deny-by-default renderer network boundary is designed and physical route-loss/fallback behavior is verified. Do not enable `BROWSER_PAGE_INSPECT_ENABLED`.
+
+## Phase 12C — Private screenshot storage (2026-10-15)
+
+Added a private screenshot artifact lifecycle for future `BROWSER_PAGE_INSPECT` results. Authenticated assigned nodes obtain a short-lived one-use grant bound to task, node, routing session, exact PNG length, and SHA-256 digest. Development bytes are stored in a private local object store behind a production adapter interface; MongoDB stores lifecycle metadata and the four-field opaque v1 reference only. Uploads validate the PNG signature/structure, dimensions, body limit, identity, route state, expiry, and exact digest. Owner-only retrieval requires the persisted `TaskResult` reference and returns download-only, `nosniff`, sandboxed, private/no-store responses. Expired grants/artifacts, abandoned uploads, failed/cancelled tasks, and unreferenced objects are cleaned automatically.
+
+- Phase 12C security tests: **8/8 PASS**.
+- Full backend regression: **259/259 PASS across 19 files** with `PUBLIC_DATA_FETCH_ENABLED=false` and `BROWSER_PAGE_INSPECT_ENABLED=false`.
+- React production build and ESLint: **PASS**; Flutter tests **97/97 PASS**; Flutter analysis clean; Android arm64 debug APK build **PASS**.
+- Browser execution remains fail closed. The backend readiness latch, Android rendering latch, and environment flag remain disabled; no WebView or physical E2E success is claimed.
+- A production private object-store adapter and verified task-scoped Chromium egress boundary remain deployment blockers.
+- See [Phase 12C audit](PHASE12C_PRIVATE_SCREENSHOT_STORAGE.md) for storage/API contracts, lifecycle rules, security evidence, and blockers.
+
+## Phase 12B — Android browser executor (2026-10-15)
+
+Added `BROWSER_PAGE_INSPECT` v1 parsing, WebRTC DataChannel dispatch, cancellation, identity binding, a strict browser resource-policy model, screenshot-capture preparation, and versioned failure-result serialization to the Android Flutter node. The implementation is deliberately **fail closed**: it creates no WebView, no browser socket, no DNS lookup, and no VPN route because the current TUN is limited to a single authorized target route and cannot prove that WebView redirects, subresources, service workers, or Chromium-originated requests cannot fall back to the physical network. The backend flag and code-side readiness latch both remain disabled; no UI, ad-verification, screenshot-storage, transport, VPN-forwarder, or payment change was made.
+
+- New focused Flutter security tests cover strict v1 contract parsing, private/rebound/timeout DNS, redirects, subresources, service workers, cancellation, unauthorized node binding, screenshot DataChannel prohibition, and the no-network fail-closed path.
+- Validation: **8/8 focused browser tests PASS**, **97/97 full Flutter tests PASS**, `flutter analyze` clean, Android arm64 debug APK build PASS, and **251/251 backend tests PASS across 18 files** on a fresh isolated database with both experimental service flags disabled.
+- Networked browser execution and physical E2E are **BLOCKED**, rather than reported as complete. A native task-scoped Chromium egress boundary, private artifact lifecycle, and device/TUN evidence are required before the latches can open.
+- See [Phase 12B audit](PHASE12B_ANDROID_BROWSER_EXECUTOR.md) for the contract, enforced behavior, limits, and required next implementation.
+
+## Phase 12A — Secure browser execution foundation (2026-10-15)
+
+Added the separate `BROWSER_PAGE_INSPECT` v1 backend contract and bounded task/result storage. The contract limits a task to one public HTTPS/443 GET, a 320–1920 by 320–2160 viewport, 1–20 second load timeout, 32 KiB extracted UTF-8 text, 64 resources, 8 MiB total transfer, and 2 MiB screenshot artifacts. Requests reject arbitrary scripts, headers, cookies, credentials, and unknown fields. Results bind task, route, node, and region, validate the final URL against the original origin and existing public target/DNS policy, and persist via the current transactionally idempotent settlement.
+
+Android WebView is **not** yet authorized to execute this service: the existing TUN only routes the task subnet and the authorized destination IP set on one port, while browser pages may request additional destinations. Platform request interception also has known gaps. A code-side readiness latch stays closed even if the environment flag is set; `BROWSER_PAGE_INSPECT_ENABLED=false` is the default. There is no screenshot object store or retrieval endpoint. No Android or physical-device execution, UI, or ad-verification changes were made.
+
+- Backend full regression: **251/251 PASS across 18 files**, using an isolated MongoDB replica set and port with `PUBLIC_DATA_FETCH_ENABLED=false` and `BROWSER_PAGE_INSPECT_ENABLED=false`.
+- Focused browser/public-fetch/settlement suite: **18/18 PASS**.
+- Architecture, blocker, result/request contracts, and future screenshot lifecycle: [Phase 12A audit](PHASE12A_SECURE_BROWSER_EXECUTION_FOUNDATION.md) and [SRS change proposal](../changes/PHASE12A_BROWSER_PAGE_INSPECT_SRS_PROPOSAL.md).
+- Next Android work: isolated no-script renderer plus per-request public DNS/redirect authorization and a deny-by-default task-scoped egress path that demonstrably cannot use WebView's unmediated fallback. Implement private artifact upload, registry, authorized retrieval, expiry, and cleanup. Do not open the readiness latch until both pass security tests.
+
+## Phase 11E — Public Data Fetch hardening (2026-10-14)
+
+The v1 `PUBLIC_DATA_FETCH` path was audited across backend dispatch/result validation, WebRTC DataChannel, Android VpnService/TUN executor, persisted `TaskResult`, and React/Flutter result viewers. Two confirmed gaps were fixed: backend result validation now requires the one-run success rate to agree with the reported success state; Android VPN readiness/metrics waits now obey the task deadline and recheck cancellation before any successful result can be returned. Regression coverage was added for contradictory result claims, exact 16 KiB multibyte UTF-8 content, debit/reward idempotency, delayed final TUN metrics, stalled stream cancellation, and invalid media charset. Existing public HTTPS/443, DNS/IP pinning, redirect revalidation, TUN binding, content/encoding and result ownership safeguards remain in place. `PUBLIC_DATA_FETCH_ENABLED=false`.
+
+- Backend: **247/247 PASS across 17 files**, including malformed/spoofed result rejection, duplicate result handling, task-level debit/reward idempotency and owner authorization for persisted fetch content.
+- React: **4/4 tests PASS**; production build PASS; ESLint PASS. Vite emitted a non-blocking large-chunk advisory.
+- Flutter: **89/89 tests PASS**; `flutter analyze` clean; Android arm64 debug APK build PASS at `Netshare/netshare_node_app/build/app/outputs/flutter-apk/app-debug.apk`.
+- All automated regression/build checks ran with `PUBLIC_DATA_FETCH_ENABLED=false`.
+- Physical Android Public Data Fetch E2E: **DEFERRED** until final project testing; no device test or E2E pass is claimed.
+- Remaining acceptance gate: perform JSON, HTML-source, and plain-text fetches on a physical Android node through the authorized TUN route; verify persisted result ownership, TUN counters, and exactly-once client debit/node reward as specified by Phase 11D.
+
+See [Phase 11E hardening audit](PHASE11E_PUBLIC_DATA_FETCH_HARDENING.md). The feature remains disabled.
+
+## Phase 11C — Public Data Fetch client UI (2026-10-14)
+
+React and Flutter now gate `PUBLIC_DATA_FETCH` submission on the authenticated backend capability. Both use the existing target, region, estimate, and submission APIs, and show only the persisted, owner-authorized `TaskResult.publicFetch`. JSON is formatted as text; HTML source is escaped/displayed as text only and downloaded as `.html.txt` with a plain-text MIME type. Result metadata and explicit failed, empty, invalid, and oversized states are included. Existing testing services, result polling, CSV reports, ratings, and settlement are preserved. `PUBLIC_DATA_FETCH_ENABLED=false`; the option stays unavailable.
+
+- Backend regression: **244/244 PASS** across 17 test files, including disabled capability and cross-client task-detail authorization.
+- React: **4/4 public fetch helper tests PASS**; Vite production build PASS; full ESLint PASS.
+- Flutter: **87/87 PASS**; `flutter analyze` has no issues.
+- Android arm64 debug APK build: **PASS** at `Netshare/netshare_node_app/build/app/outputs/flutter-apk/app-debug.apk`.
+- Automated cases cover both sides of feature gating, JSON formatting, safe HTML source handling, plain-text download, encoding/type/status/size rejection, failed/empty results, and My Tasks navigation to the existing detail API.
+- Physical Android verification and end-to-end settlement remain **unverified / blocked** because no device is attached; no physical E2E pass is claimed. Keep the service disabled until that gate is completed.
+
+See the [Phase 11C audit](PHASE11C_PUBLIC_DATA_FETCH_CLIENT_UI.md). Phases 11A and 11B remain historical records for the backend and Android execution stages.
+
+## Phase 11B — Android public data fetch execution (2026-10-14)
+
+The existing Android DataChannel executor now handles `PUBLIC_DATA_FETCH` v1 through its verified VpnService/TUN route, with public HTTPS/443 DNS and same-origin redirect checks, bounded UTF-8 JSON/HTML/plain text content, session/node binding, deduplication and cancellation. Flutter tests **81/81 PASS**, Flutter analysis clean, backend regression **243/243 PASS**, and Android arm64 debug APK build **PASS**. No Android device is attached, so physical TUN and end-to-end settlement acceptance remain blocked. The backend flag stays **`PUBLIC_DATA_FETCH_ENABLED=false`** and the service is not in the UI. See [Phase 11B audit](PHASE11B_ANDROID_PUBLIC_DATA_FETCH.md).
+
+## Phase 11A — Public Data Fetch backend foundation (2026-10-14)
+
+`PUBLIC_DATA_FETCH` has a backend-only, versioned DataChannel task/result contract and bounded `TaskResult.publicFetch` storage. The service is disabled by default (`PUBLIC_DATA_FETCH_ENABLED=false`) and is not available in the client or Android node. HTTPS GET, port 443, same-origin redirects, public DNS targets, no credentials/cookies/custom headers, JSON/HTML/plain text and a 16 KiB response limit are required. The backend validates task/node/session identity and reuses the existing exactly-once transactional settlement; it does not fetch client targets. See [SRS proposal](../changes/PHASE11A_PUBLIC_DATA_FETCH_SRS_PROPOSAL.md) and [Phase 11A audit](PHASE11A_PUBLIC_DATA_FETCH.md). Android execution and physical-device acceptance remain pending. **Full backend suite: 243/243 passed across 17 files**, using an isolated MongoDB test database and port (2026-10-14).
+
 ## Phase 10A — Real client task results (2026-10-11)
 
 Implemented GET-only accessibility (HTTP reachability), performance (GET duration/size), and localization (response language observations). Unsupported ad, UX, compliance, and other methods are rejected. Android DataChannel execution now carries actual per-execution records plus aggregate observations; backend validates/binds and persists them, with exactly-once transactional settlement. React and Flutter details and CSV read the persisted result. No response preview is returned. See [Phase 10A audit](PHASE10A_REAL_TASK_RESULTS.md). Physical CPH2725 GET executions passed in Phase 10B; controlled endpoint egress logs and broader device/network coverage remain outstanding.

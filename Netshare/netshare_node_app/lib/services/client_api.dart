@@ -117,6 +117,11 @@ class ClientApi {
     return _json('GET', '/tasks/client/dashboard');
   }
 
+  Future<Map<String, dynamic>> capabilities() async {
+    requireClient();
+    return _json('GET', '/tasks/capabilities');
+  }
+
   Future<Map<String, dynamic>> tasks() async {
     requireClient();
     return _json('GET', '/tasks/my-tasks');
@@ -125,6 +130,21 @@ class ClientApi {
   Future<Map<String, dynamic>> task(String id) async {
     requireClient();
     return _json('GET', '/tasks/${Uri.encodeComponent(id)}');
+  }
+
+  Future<http.Response> browserScreenshot(
+    String taskId,
+    String artifactId,
+  ) async {
+    requireClient();
+    if (!RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(taskId) ||
+        !RegExp(r'^[a-f0-9]{32}$').hasMatch(artifactId)) {
+      throw const ClientApiException(400, 'Invalid screenshot reference.');
+    }
+    return _request(
+      'GET',
+      '/tasks/${Uri.encodeComponent(taskId)}/browser-artifacts/${Uri.encodeComponent(artifactId)}',
+    );
   }
 
   Future<Map<String, dynamic>> regions() async {

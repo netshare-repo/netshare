@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../services/client_api.dart';
 import '../../services/mobile_document_service.dart';
 import '../../widgets/client_widgets.dart';
+import '../../widgets/public_data_fetch_result_view.dart';
+import '../../widgets/browser_page_inspect_result_view.dart';
 
 class TaskDetailsScreen extends StatefulWidget {
   final ClientApi api;
@@ -123,26 +125,60 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
               infoTile('Success rate', '${result['successRate']}%'),
               infoTile('Response time', '${result['latencyMs']} ms'),
               infoTile('Bandwidth', '${result['bandwidthUsedMB']} MB'),
-              infoTile('HTTP status', result['statusCode'] == 0 ? 'No HTTP response' : result['statusCode']),
-              infoTile('Node region', details['nodeRegion'] ?? task['assignedNodeId']?['region']),
+              infoTile(
+                'HTTP status',
+                result['statusCode'] == 0
+                    ? 'No HTTP response'
+                    : result['statusCode'],
+              ),
+              infoTile(
+                'Node region',
+                details['nodeRegion'] ?? task['assignedNodeId']?['region'],
+              ),
               infoTile('Attempted executions', details['attemptedExecutions']),
               infoTile('Completed executions', details['completedExecutions']),
-              infoTile('Total duration', details['totalDurationMs'] == null ? null : '${details['totalDurationMs']} ms'),
-              infoTile('Total response size', details['totalResponseSizeBytes'] == null ? null : '${details['totalResponseSizeBytes']} bytes'),
+              infoTile(
+                'Total duration',
+                details['totalDurationMs'] == null
+                    ? null
+                    : '${details['totalDurationMs']} ms',
+              ),
+              infoTile(
+                'Total response size',
+                details['totalResponseSizeBytes'] == null
+                    ? null
+                    : '${details['totalResponseSizeBytes']} bytes',
+              ),
               infoTile('Recorded at', result['completedAt']),
               if (details['error'] != null) infoTile('Error', details['error']),
               for (final raw in executions)
                 if (raw is Map) ...[
                   const Divider(),
-                  Text('Execution ${raw['execution']}', style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    'Execution ${raw['execution']}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   infoTile('Success', raw['success']),
                   infoTile('Started', raw['startedAt']),
                   infoTile('Completed', raw['completedAt']),
-                  infoTile('HTTP status', raw['statusCode'] == 0 ? 'No HTTP response' : raw['statusCode']),
+                  infoTile(
+                    'HTTP status',
+                    raw['statusCode'] == 0
+                        ? 'No HTTP response'
+                        : raw['statusCode'],
+                  ),
                   infoTile('Final URL', raw['finalUrl']),
                   infoTile('Content type', raw['contentType']),
-                  infoTile('Latency', raw['latencyMs'] == null ? null : '${raw['latencyMs']} ms'),
-                  infoTile('Response size', raw['responseSizeBytes'] == null ? null : '${raw['responseSizeBytes']} bytes'),
+                  infoTile(
+                    'Latency',
+                    raw['latencyMs'] == null ? null : '${raw['latencyMs']} ms',
+                  ),
+                  infoTile(
+                    'Response size',
+                    raw['responseSizeBytes'] == null
+                        ? null
+                        : '${raw['responseSizeBytes']} bytes',
+                  ),
                   infoTile('Service evidence', raw['serviceEvidence']),
                   if (raw['error'] != null) infoTile('Error', raw['error']),
                 ],
@@ -151,6 +187,28 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
               FilledButton(
                 onPressed: _busy ? null : report,
                 child: const Text('Open / save CSV report'),
+              ),
+            if (task['serviceType'] == 'PUBLIC_DATA_FETCH' && result is Map)
+              PublicDataFetchResultView(
+                taskId: widget.taskId,
+                fetch: result['publicFetch'] is Map
+                    ? Map<String, dynamic>.from(result['publicFetch'] as Map)
+                    : null,
+                result: Map<String, dynamic>.from(result),
+                resultData: Map<dynamic, dynamic>.from(details),
+              ),
+            if (task['serviceType'] == 'BROWSER_PAGE_INSPECT' && result is Map)
+              BrowserPageInspectResultView(
+                api: widget.api,
+                taskId: widget.taskId,
+                browser: result['browserPageInspect'] is Map
+                    ? Map<String, dynamic>.from(
+                        result['browserPageInspect'] as Map,
+                      )
+                    : null,
+                result: Map<String, dynamic>.from(result),
+                resultData: Map<dynamic, dynamic>.from(details),
+                task: task,
               ),
             if (rated)
               infoTile('Your node rating', task['clientRating']['rating']),

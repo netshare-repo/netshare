@@ -11,7 +11,7 @@
 
 .stats-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(59, 130, 246, 0.4);
+  border-color: rgba(6, 182, 212, 0.4);
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
 }
 
@@ -23,7 +23,7 @@
 }
 
 .stats-card-title {
-  color: #94a3b8;
+  color: #a2a6ab;
   font-size: 13px;
   font-weight: 500;
   text-transform: uppercase;
@@ -37,8 +37,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(59, 130, 246, 0.12);
-  color: #3b82f6;
+  background: rgba(6, 182, 212, 0.12);
+  color: #06b6d4;
 }
 
 .stats-card-green .stats-card-icon-box {
@@ -78,7 +78,7 @@
 }
 
 .stats-card-subtitle {
-  color: #64748b;
+  color: #777d84;
   font-size: 12px;
 }
 

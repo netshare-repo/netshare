@@ -1,20 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
-  Users,
-  Server,
-  ListChecks,
-  Wallet,
-  Activity,
-  CheckCircle2,
-  Store,
-  PackageCheck,
   RefreshCw,
   Radio,
   Globe,
-  AlertTriangle,
-  Zap,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import AdminLayout from "../../layouts/AdminLayout";
 import {
   getAdminDashboard,
@@ -167,77 +157,58 @@ function AdminDashboard() {
     return acc;
   }, {});
 
-  const statCards = [
-    { title: 'Accounted bandwidth (MB)', value: stats.bandwidth?.totalMB?.toFixed(2) ?? 'Unavailable', icon: Activity, color: '#2563eb' },
-    { title: 'Nodes seen within 60 seconds', value: stats.network?.freshNodes ?? 'Unavailable', icon: Server, color: '#2563eb' },
-    { title: 'Measured mean HTTP latency (ms)', value: stats.network?.latencyMs?.toFixed(1) ?? 'Unmeasured', icon: Activity, color: '#2563eb' },
-    { title: 'Fresh-node reliability (%)', value: stats.network?.reliabilityPercent?.toFixed(1) ?? 'Unmeasured', icon: CheckCircle2, color: '#2563eb' },
-    { title: 'Fresh-node assignments / capacity', value: stats.network ? `${stats.network.activeAssignments} / ${stats.network.capacity}` : 'Unavailable', icon: ListChecks, color: '#2563eb' },
+  const summaryCards = [
     {
-      title: "Execution Plane Sockets",
-      value: `${liveNodes.length} Live`,
-      icon: Radio,
-      color: isSocketConnected ? "#10b981" : "#64748b",
+      title: "Network Health",
+      accent: "#06b6d4",
+      primaryLabel: "Accounted bandwidth",
+      primaryValue: stats.bandwidth?.totalMB?.toFixed(2) ?? "Unavailable",
+      unit: "MB",
+      metrics: [
+        { label: "Fresh nodes", value: stats.network?.freshNodes ?? "Unavailable" },
+        { label: "Mean latency", value: stats.network?.latencyMs != null ? `${stats.network.latencyMs.toFixed(1)} ms` : "Unmeasured" },
+        { label: "Reliability", value: stats.network?.reliabilityPercent != null ? `${stats.network.reliabilityPercent.toFixed(1)}%` : "Unmeasured" },
+        { label: "Assignments / capacity", value: stats.network ? `${stats.network.activeAssignments} / ${stats.network.capacity}` : "Unavailable" },
+      ],
+      status: `${liveNodes.length} live socket${liveNodes.length === 1 ? "" : "s"}`,
+      statusTone: isSocketConnected ? "online" : "offline",
     },
     {
-      title: "Active DB Nodes",
-      value: stats.activeNodes,
-      icon: Activity,
-      color: "#16a34a",
+      title: "Task Execution",
+      accent: "#06b6d4",
+      primaryLabel: "Active tasks",
+      primaryValue: stats.activeTasks,
+      metrics: [
+        { label: "All tasks", value: stats.totalTasks },
+        { label: "Completed", value: stats.completedTasks },
+        { label: "Failed", value: stats.failedTasks },
+        { label: "Execution sockets", value: `${liveNodes.length} live` },
+      ],
     },
     {
-      title: "Total Registered Nodes",
-      value: stats.totalNodes,
-      icon: Server,
-      color: "#7c3aed",
-    },
-    {
-      title: "Active Tasks",
-      value: stats.activeTasks,
-      icon: Zap,
-      color: "#0ea5e9",
-    },
-    {
-      title: "Completed Tasks",
-      value: stats.completedTasks,
-      icon: CheckCircle2,
-      color: "#22c55e",
-    },
-    {
-      title: "Failed Tasks",
-      value: stats.failedTasks,
-      icon: AlertTriangle,
-      color: stats.failedTasks > 0 ? "#ef4444" : "#94a3b8",
-    },
-    {
-      title: "Total Users",
-      value: stats.totalUsers,
-      icon: Users,
-      color: "#2563eb",
-    },
-    {
-      title: "Credits Issued",
-      value: stats.totalCreditsIssued,
-      icon: Wallet,
-      color: "#059669",
+      title: "Platform & Credits",
+      accent: "#10b981",
+      primaryLabel: "Total users",
+      primaryValue: stats.totalUsers,
+      metrics: [
+        { label: "Active DB nodes", value: stats.activeNodes },
+        { label: "Registered nodes", value: stats.totalNodes },
+        { label: "Credits issued", value: stats.totalCreditsIssued },
+        { label: "Transactions", value: stats.totalTransactions },
+      ],
     },
   ];
 
   return (
     <AdminLayout>
       <div className="admin-dashboard-page">
-        <div className="admin-dashboard-hero">
-          <div>
-            <h2>Distributed Control & Execution Plane Overview</h2>
-            <p>
-              Real-time monitoring of connected edge node agents, task queues,
-              telemetry metrics, and decentralized bandwidth distribution.
-            </p>
+        <div className="admin-dashboard-toolbar">
+          <div className="admin-dashboard-live-state">
+            <span className={`admin-live-dot ${isSocketConnected ? "online" : "offline"}`} />
+            <span>{isSocketConnected ? "Control plane connected" : "Connecting to control plane"}</span>
           </div>
-
           <button onClick={loadDashboard}>
-            <RefreshCw size={18} />
-            Refresh
+            <RefreshCw size={15} /> Refresh data
           </button>
         </div>
 
@@ -247,59 +218,31 @@ function AdminDashboard() {
           <div className="admin-dashboard-loading">Loading dashboard...</div>
         ) : (
           <>
-            <div className="admin-stats-grid">
-              {statCards.map((card) => {
-                const Icon = card.icon;
-
+            <div className="admin-summary-grid">
+              {summaryCards.map((card) => {
                 return (
-                  <div className="admin-stat-card" key={card.title}>
-                    <div
-                      className="admin-stat-icon"
-                      style={{ backgroundColor: `${card.color}18` }}
-                    >
-                      <Icon size={24} color={card.color} />
+                  <section className="admin-summary-card" key={card.title} style={{ "--summary-accent": card.accent }}>
+                    <div className="admin-summary-card-header">
+                      <div className="admin-summary-heading">
+                        <h2>{card.title}</h2>
+                      </div>
+                      {card.status && <span className={`admin-summary-status ${card.statusTone}`}>{card.status}</span>}
                     </div>
-
-                    <div>
-                      <h3>{card.value}</h3>
-                      <p>{card.title}</p>
+                    <div className="admin-summary-primary">
+                      <span>{card.primaryLabel}</span>
+                      <strong>{card.primaryValue}{card.unit && <small> {card.unit}</small>}</strong>
                     </div>
-                  </div>
+                    <div className="admin-summary-metrics">
+                      {card.metrics.map((metric) => (
+                        <div className="admin-summary-metric" key={metric.label}>
+                          <span>{metric.label}</span>
+                          <strong>{metric.value}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
                 );
               })}
-            </div>
-
-            {/* Quick Nav */}
-            <div className="admin-quick-grid">
-              <button onClick={() => navigate("/admin/users")}>
-                <Users size={22} />
-                Manage Users
-              </button>
-
-              <button onClick={() => navigate("/admin/nodes")}>
-                <Server size={22} />
-                Manage Nodes
-              </button>
-
-              <button onClick={() => navigate("/admin/tasks")}>
-                <ListChecks size={22} />
-                Manage Tasks
-              </button>
-
-              <button onClick={() => navigate("/admin/transactions")}>
-                <Wallet size={22} />
-                Transactions
-              </button>
-
-              <button onClick={() => navigate("/admin/marketplace/products")}>
-                <Store size={22} />
-                Marketplace Products
-              </button>
-
-              <button onClick={() => navigate("/admin/marketplace/orders")}>
-                <PackageCheck size={22} />
-                Marketplace Orders
-              </button>
             </div>
 
             {/* Live Regional Map & Real-time Activity Feeds */}
@@ -308,10 +251,10 @@ function AdminDashboard() {
               <div className="admin-panel">
                 <div className="admin-panel-header">
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <Globe size={18} color="#0ea5e9" />
+                    <Globe size={18} color="#06b6d4" />
                     <h3>Live Node Regional Distribution</h3>
                   </div>
-                  <span style={{ fontSize: "0.85rem", color: "#64748b" }}>
+                  <span style={{ fontSize: "0.85rem", color: "#777d84" }}>
                     {nodesList.length} Registered Nodes
                   </span>
                 </div>
@@ -329,7 +272,7 @@ function AdminDashboard() {
                             <span>{count} node{count > 1 ? "s" : ""} ({percent}%)</span>
                           </div>
                           <div style={{ height: "6px", background: "rgba(255,255,255,0.06)", borderRadius: "3px", overflow: "hidden" }}>
-                            <div style={{ width: `${percent}%`, height: "100%", background: "#0ea5e9", borderRadius: "3px" }} />
+                            <div style={{ width: `${percent}%`, height: "100%", background: "#06b6d4", borderRadius: "3px" }} />
                           </div>
                         </div>
                       );
@@ -342,10 +285,10 @@ function AdminDashboard() {
               <div className="admin-panel">
                 <div className="admin-panel-header">
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <Radio size={18} color={isSocketConnected ? "#10b981" : "#64748b"} className={isSocketConnected ? "animate-pulse" : ""} />
+                    <Radio size={18} color={isSocketConnected ? "#10b981" : "#777d84"} className={isSocketConnected ? "animate-pulse" : ""} />
                     <h3>Real-Time System Activity Ticker</h3>
                   </div>
-                  <span style={{ fontSize: "0.8rem", color: isSocketConnected ? "#10b981" : "#64748b" }}>
+                  <span style={{ fontSize: "0.8rem", color: isSocketConnected ? "#10b981" : "#777d84" }}>
                     {isSocketConnected ? "WebSocket Stream Online" : "Connecting..."}
                   </span>
                 </div>
@@ -358,7 +301,7 @@ function AdminDashboard() {
                       <div className="admin-mini-item" key={evt.id} style={{ fontSize: "0.85rem" }}>
                         <div style={{ display: "flex", flexDirection: "column" }}>
                           <span style={{ color: "#e2e8f0" }}>{evt.message}</span>
-                          <span style={{ fontSize: "0.75rem", color: "#64748b" }}>{evt.timestamp}</span>
+                          <span style={{ fontSize: "0.75rem", color: "#777d84" }}>{evt.timestamp}</span>
                         </div>
                       </div>
                     ))}

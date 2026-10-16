@@ -59,10 +59,29 @@ const buildIceConfig = () => {
 
 const _iceConfig = buildIceConfig();
 
+const boundedInt = (value, fallback, min, max) => {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isInteger(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+};
+
 const config = Object.freeze({
   nodeEnv: process.env.NODE_ENV || 'development',
   isProduction,
   isDevelopment: !isProduction,
+  publicDataFetchEnabled: process.env.PUBLIC_DATA_FETCH_ENABLED === 'true',
+  browserPageInspectEnabled: process.env.BROWSER_PAGE_INSPECT_ENABLED === 'true',
+  regionalUptimeMonitorEnabled: process.env.REGIONAL_UPTIME_MONITOR_ENABLED === 'true',
+  regionalUptimeMonitorSchedulerIntervalMs: boundedInt(process.env.REGIONAL_UPTIME_MONITOR_SCHEDULER_INTERVAL_MS, 15000, 5000, 60000),
+  screenshotStorage: Object.freeze({
+    provider: process.env.SCREENSHOT_STORAGE_PROVIDER || (isProduction ? 'external' : 'local'),
+    localDirectory: process.env.SCREENSHOT_STORAGE_LOCAL_DIR || './private/screenshot-artifacts',
+    maxBytes: boundedInt(process.env.SCREENSHOT_ARTIFACT_MAX_BYTES, 2 * 1024 * 1024, 1024, 2 * 1024 * 1024),
+    uploadGrantTtlMs: boundedInt(process.env.SCREENSHOT_UPLOAD_GRANT_TTL_MS, 5 * 60 * 1000, 30 * 1000, 15 * 60 * 1000),
+    retentionMs: boundedInt(process.env.SCREENSHOT_ARTIFACT_RETENTION_MS, 24 * 60 * 60 * 1000, 5 * 60 * 1000, 7 * 24 * 60 * 60 * 1000),
+    cleanupIntervalMs: boundedInt(process.env.SCREENSHOT_CLEANUP_INTERVAL_MS, 15 * 60 * 1000, 60 * 1000, 60 * 60 * 1000),
+    orphanGraceMs: boundedInt(process.env.SCREENSHOT_ORPHAN_GRACE_MS, 15 * 60 * 1000, 60 * 1000, 60 * 60 * 1000),
+    abandonedUploadMs: boundedInt(process.env.SCREENSHOT_ABANDONED_UPLOAD_MS, 10 * 60 * 1000, 60 * 1000, 60 * 60 * 1000),
+  }),
   port: parseInt(process.env.PORT || '8000', 10),
   mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27017/netshare_db',
   jwt: {
@@ -70,7 +89,7 @@ const config = Object.freeze({
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
-  corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:3000').split(',').map(s => s.trim()).filter(Boolean),
+  corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000').split(',').map(s => s.trim()).filter(Boolean),
   smtp: {
     host: process.env.SMTP_HOST || '',
     port: parseInt(process.env.SMTP_PORT || '587', 10),

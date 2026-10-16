@@ -11,7 +11,7 @@
   width: 36px;
   height: 36px;
   border: 3px solid rgba(255, 255, 255, 0.1);
-  border-top-color: #3b82f6;
+  border-top-color: #06b6d4;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -29,7 +29,7 @@
 }
 
 .spinner-text {
-  color: #94a3b8;
+  color: #a2a6ab;
   font-size: 14px;
   margin: 0;
 }

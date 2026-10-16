@@ -1,6 +1,7 @@
 import express from "express";
 import {
   getClientDashboard,
+  getTaskCapabilities,
   createTask,
   getMyTasks,
   getTaskById,
@@ -15,8 +16,21 @@ import { protect } from "../middleware/authMiddleware.js";
 import { allowRoles } from "../middleware/roleMiddleware.js";
 import { validateTaskSubmission } from "../middleware/securityMiddleware.js";
 import { developmentOnly } from '../middleware/productionGuard.js';
+import config from '../config/env.js';
+import {
+  authorizeScreenshotUpload,
+  uploadScreenshotArtifact,
+  downloadScreenshotArtifact,
+} from '../controllers/screenshotArtifactController.js';
 
 const router = express.Router();
+
+router.get(
+  "/capabilities",
+  protect,
+  allowRoles("platform_client", "both"),
+  getTaskCapabilities
+);
 
 router.get(
   "/client/dashboard",
@@ -48,6 +62,27 @@ router.get(
 );
 
 router.get("/:id/report.csv", protect, downloadTaskReport);
+
+router.post(
+  '/:id/browser-artifacts/upload-grant',
+  protect,
+  allowRoles('node_participant', 'both'),
+  authorizeScreenshotUpload,
+);
+
+router.put(
+  '/:id/browser-artifacts/:artifactId',
+  protect,
+  allowRoles('node_participant', 'both'),
+  express.raw({ type: 'image/png', limit: config.screenshotStorage.maxBytes }),
+  uploadScreenshotArtifact,
+);
+
+router.get(
+  '/:id/browser-artifacts/:artifactId',
+  protect,
+  downloadScreenshotArtifact,
+);
 
 router.post(
   "/:id/rating",

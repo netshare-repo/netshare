@@ -1,9 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Wallet,
-  Send,
-  Activity,
-  CheckCircle,
   ArrowUpRight,
   Globe2,
 } from "lucide-react";
@@ -48,28 +44,24 @@ function ClientDashboard() {
     {
       title: "Available Credits",
       value: wallet?.balance ?? dashboard.availableCredits ?? 0,
-      icon: Wallet,
       color: "blue",
       text: "Credits ready to spend",
     },
     {
       title: "Submitted Tasks",
       value: tasks.length,
-      icon: Send,
       color: "cyan",
       text: "Total submitted tasks",
     },
     {
       title: "Running Tasks",
       value: dashboard.activeTasks,
-      icon: Activity,
       color: "orange",
       text: "Pending, assigned, running",
     },
     {
       title: "Completed Tasks",
       value: dashboard.completedTasks,
-      icon: CheckCircle,
       color: "green",
       text: "Successfully completed",
     },
@@ -103,14 +95,9 @@ function ClientDashboard() {
 
         <div className="stats-grid">
           {stats.map((item) => {
-            const Icon = item.icon;
-
             return (
               <div className={`stat-card ${item.color}`} key={item.title}>
                 <div className="stat-top">
-                  <div className="stat-icon">
-                    <Icon size={22} />
-                  </div>
                   <span>+ Phase 1</span>
                 </div>
 
@@ -173,10 +160,6 @@ function ClientDashboard() {
 
           <div className="wallet-panel">
             <div className="wallet-card-main">
-              <div className="wallet-icon-box">
-                <Wallet size={28} />
-              </div>
-
               <h2>Wallet Summary</h2>
               <p>Current credit balance</p>
 

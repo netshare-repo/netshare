@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PackageCheck, RefreshCw, Search } from "lucide-react";
 import AdminLayout from "../../layouts/AdminLayout";
+import AdminPagination from "./AdminPagination";
 import {
   adminGetMarketplaceOrders,
   adminUpdateMarketplaceOrderStatus,
@@ -12,6 +13,8 @@ function MarketplaceOrders() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState("");
   const [message, setMessage] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   
   const [filters, setFilters] = useState({
     status: "",
@@ -35,8 +38,17 @@ function MarketplaceOrders() {
   }, [filters]);
 
   const handleFilterChange = (e) => {
+    setPage(1);
     setFilters({ ...filters, [e.target.name]: e.target.value });
   };
+
+  const newestOrders = [...orders].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  const filteredOrders = newestOrders.filter((order) => {
+    const search = filters.search.trim().toLowerCase();
+    const matchesSearch = !search || [order._id, order.productName, order.userId?.name, order.userId?.email].some((value) => String(value || "").toLowerCase().includes(search));
+    return matchesSearch && (!filters.status || order.status === filters.status);
+  });
+  const pageOrders = filteredOrders.slice((page - 1) * pageSize, page * pageSize);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -79,14 +91,14 @@ function MarketplaceOrders() {
             <p>View and fulfil credit-based marketplace orders.</p>
           </div>
 
-          <button onClick={loadOrders}>
+          <button onClick={() => { if (page === 1) void loadOrders(); else setPage(1); }}>
             <RefreshCw size={18} />
             Refresh
           </button>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
-          <form onSubmit={handleSearch} style={{ display: 'flex', alignItems: 'center', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', padding: '0 10px', flex: 1, minWidth: '250px' }}>
+        <div className="amo-filters">
+          <form onSubmit={handleSearch} className="amo-search-form">
             <Search size={18} color="white" />
             <input 
               type="text" 
@@ -94,12 +106,11 @@ function MarketplaceOrders() {
               placeholder="Search by Order ID..." 
               value={filters.search}
               onChange={handleFilterChange}
-              style={{ background: 'transparent', border: 'none', color: 'white', padding: '10px', flex: 1, outline: 'none' }}
             />
-            <button type="submit" style={{ background: '#38bdf8', border: 'none', color: '#0f172a', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Search</button>
+            <button type="submit">Search</button>
           </form>
 
-          <select name="status" value={filters.status} onChange={handleFilterChange} style={{ background: '#1e293b', border: '1px solid #334155', color: 'white', padding: '10px', borderRadius: '6px', outline: 'none' }}>
+          <select name="status" value={filters.status} onChange={handleFilterChange}>
             <option value="">All Statuses</option>
             <option value="pending">Pending</option>
             <option value="fulfilled">Fulfilled</option>
@@ -110,9 +121,10 @@ function MarketplaceOrders() {
 
         {message && <div className="amo-message">{message}</div>}
 
+        {!loading && <AdminPagination page={page} pageSize={pageSize} total={filteredOrders.length} onPageChange={setPage} onPageSizeChange={setPageSize} />}
         {loading ? (
           <div className="amo-empty">Loading orders...</div>
-        ) : orders.length === 0 ? (
+        ) : filteredOrders.length === 0 ? (
           <div className="amo-empty">No marketplace orders found.</div>
         ) : (
           <div className="amo-table-wrap">
@@ -129,22 +141,22 @@ function MarketplaceOrders() {
               </thead>
 
               <tbody>
-                {orders.map((order) => (
+                {pageOrders.map((order) => (
                   <tr key={order._id}>
                     <td>
                       <div className="amo-product">
                         <PackageCheck size={20} />
                         <div>
                           <strong>{order.productName}</strong>
-                          <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{order._id}</span>
+                          <span className="amo-secondary">{order._id}</span>
                         </div>
                       </div>
                     </td>
 
                     <td>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <div className="amo-user">
                         <strong>{order.userId?.name || "Unknown"}</strong>
-                        <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{order.userId?.email}</span>
+                        <span className="amo-secondary">{order.userId?.email}</span>
                       </div>
                     </td>
 

@@ -36,6 +36,11 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
   Map<String, dynamic>? _pricing;
   String? _error;
   bool _loading = true, _busy = false;
+  bool _publicFetchEnabled = false;
+  bool _browserInspectEnabled = false;
+  String _viewport = '1365x768';
+  int _pageLoadTimeoutMs = 15000;
+  bool _captureScreenshot = true;
   int _revision = 0;
   @override
   void initState() {
@@ -58,11 +63,18 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
       _revision++;
     });
     try {
-      final result = await widget.api.regions();
+      final results = await Future.wait<Map<String, dynamic>>([
+        widget.api.regions(),
+        widget.api.capabilities().catchError((_) => <String, dynamic>{}),
+      ]);
+      final result = results[0];
       if (!mounted) return;
       setState(() {
         _regions = records(result['regions']);
         _region = _regions.isEmpty ? null : _regions.first['region'];
+        _publicFetchEnabled = results[1]['publicDataFetchEnabled'] == true;
+        _browserInspectEnabled =
+            results[1]['browserPageInspectEnabled'] == true;
       });
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
@@ -77,6 +89,8 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
   });
   Future<void> estimate() async {
     if (!_form.currentState!.validate() || _region == null) return;
+    if (_service == 'PUBLIC_DATA_FETCH' && !_publicFetchEnabled) return;
+    if (_service == 'BROWSER_PAGE_INSPECT' && !_browserInspectEnabled) return;
     final revision = _revision;
     setState(() {
       _busy = true;
@@ -85,7 +99,9 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
     try {
       final result = await widget.api.estimate(
         _region!,
-        int.parse(_count.text),
+        ['PUBLIC_DATA_FETCH', 'BROWSER_PAGE_INSPECT'].contains(_service)
+            ? 1
+            : int.parse(_count.text),
       );
       if (result['quote'] is! Map ||
           result['quote']['totalCredits'] is! num ||
@@ -107,6 +123,34 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
         _busy) {
       return;
     }
+    if (_service == 'PUBLIC_DATA_FETCH') {
+      final uri = Uri.tryParse(_url.text.trim());
+      if (!_publicFetchEnabled ||
+          uri == null ||
+          uri.scheme != 'https' ||
+          uri.userInfo.isNotEmpty ||
+          (uri.hasPort && uri.port != 443)) {
+        setState(
+          () => _error =
+              'Public Data Fetch requires an enabled capability and a public HTTPS URL on port 443.',
+        );
+        return;
+      }
+    }
+    if (_service == 'BROWSER_PAGE_INSPECT') {
+      final uri = Uri.tryParse(_url.text.trim());
+      if (!_browserInspectEnabled ||
+          uri == null ||
+          uri.scheme != 'https' ||
+          uri.userInfo.isNotEmpty ||
+          (uri.hasPort && uri.port != 443)) {
+        setState(
+          () => _error =
+              'Browser Page Inspect is coming soon and requires an enabled capability and a public HTTPS URL on port 443.',
+        );
+        return;
+      }
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -117,7 +161,22 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
         'method': 'GET',
         'serviceType': _service,
         'targetRegion': _region,
-        'executionLimit': int.parse(_count.text),
+        'executionLimit':
+            ['PUBLIC_DATA_FETCH', 'BROWSER_PAGE_INSPECT'].contains(_service)
+            ? 1
+            : int.parse(_count.text),
+        if (_service == 'BROWSER_PAGE_INSPECT')
+          'browserPageInspect': {
+            'contractVersion': 1,
+            'viewport': {
+              'width': int.parse(_viewport.split('x')[0]),
+              'height': int.parse(_viewport.split('x')[1]),
+              'deviceScaleFactor': 1,
+            },
+            'pageLoadTimeoutMs': _pageLoadTimeoutMs,
+            'maxTextBytes': 32768,
+            'captureScreenshot': _captureScreenshot,
+          },
       });
       if (!mounted) return;
       mobileMessage(
@@ -152,12 +211,18 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
                   Text(_error!, style: const TextStyle(color: Colors.red)),
                 TextFormField(
                   controller: _url,
-                  decoration: const InputDecoration(labelText: 'Target URL'),
+                  decoration: InputDecoration(
+                    labelText: _service == 'BROWSER_PAGE_INSPECT'
+                        ? 'Public HTTPS URL'
+                        : 'Target URL',
+                  ),
                   validator: SubmitTaskScreen.validateUrl,
                   onChanged: (_) => invalidate(),
                 ),
                 const Text('HTTP method: GET only'),
-                const Text('Localization observes response language signals. Ad verification needs an expected ad identifier and is unavailable.'),
+                const Text(
+                  'Localization observes response language signals. Ad verification needs an expected ad identifier and is unavailable.',
+                ),
                 DropdownButtonFormField<String>(
                   isExpanded: true,
                   key: ValueKey('service:$_service'),
@@ -168,11 +233,26 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
                             'accessibility_testing',
                             'localization_testing',
                             'performance_testing',
+                            'PUBLIC_DATA_FETCH',
+                            'BROWSER_PAGE_INSPECT',
                           ]
                           .map(
                             (service) => DropdownMenuItem(
+                              enabled: service == 'PUBLIC_DATA_FETCH'
+                                  ? _publicFetchEnabled
+                                  : service == 'BROWSER_PAGE_INSPECT'
+                                  ? _browserInspectEnabled
+                                  : true,
                               value: service,
-                              child: Text(service),
+                              child: Text(
+                                service == 'PUBLIC_DATA_FETCH' &&
+                                        !_publicFetchEnabled
+                                    ? 'Public Data Fetch (currently unavailable)'
+                                    : service == 'BROWSER_PAGE_INSPECT' &&
+                                          !_browserInspectEnabled
+                                    ? 'Browser Page Inspect (Coming Soon)'
+                                    : service,
+                              ),
                             ),
                           )
                           .toList(),
@@ -180,9 +260,112 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
                       ? null
                       : (value) {
                           _service = value!;
+                          if (_service == 'PUBLIC_DATA_FETCH') {
+                            _count.text = '1';
+                          }
+                          if (_service == 'BROWSER_PAGE_INSPECT') {
+                            _count.text = '1';
+                          }
                           invalidate();
                         },
                 ),
+                if (!_publicFetchEnabled)
+                  const Text('Public Data Fetch is currently unavailable.'),
+                if (!_browserInspectEnabled) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Browser Page Inspect · Coming Soon',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const Text(
+                    'Secure browser rendering is not enabled by the backend. These settings cannot be submitted yet.',
+                  ),
+                  DropdownButtonFormField<String>(
+                    initialValue: _viewport,
+                    decoration: const InputDecoration(labelText: 'Viewport'),
+                    items: const ['1280x720', '1365x768', '1920x1080']
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(value),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: null,
+                  ),
+                  DropdownButtonFormField<int>(
+                    initialValue: _pageLoadTimeoutMs,
+                    decoration: const InputDecoration(
+                      labelText: 'Page load timeout',
+                    ),
+                    items: const [5000, 10000, 15000, 20000]
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text('${value ~/ 1000} seconds'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: null,
+                  ),
+                  CheckboxListTile(
+                    value: _captureScreenshot,
+                    onChanged: null,
+                    title: const Text('Include screenshot artifact'),
+                  ),
+                ],
+                if (_service == 'BROWSER_PAGE_INSPECT' &&
+                    _browserInspectEnabled) ...[
+                  DropdownButtonFormField<String>(
+                    initialValue: _viewport,
+                    decoration: const InputDecoration(labelText: 'Viewport'),
+                    items: const ['1280x720', '1365x768', '1920x1080']
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(value),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: _busy
+                        ? null
+                        : (value) {
+                            if (value != null) {
+                              setState(() => _viewport = value);
+                            }
+                          },
+                  ),
+                  DropdownButtonFormField<int>(
+                    initialValue: _pageLoadTimeoutMs,
+                    decoration: const InputDecoration(
+                      labelText: 'Page load timeout',
+                    ),
+                    items: const [5000, 10000, 15000, 20000]
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text('${value ~/ 1000} seconds'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: _busy
+                        ? null
+                        : (value) {
+                            if (value != null) {
+                              setState(() => _pageLoadTimeoutMs = value);
+                            }
+                          },
+                  ),
+                  CheckboxListTile(
+                    value: _captureScreenshot,
+                    onChanged: _busy
+                        ? null
+                        : (value) => setState(
+                            () => _captureScreenshot = value ?? false,
+                          ),
+                    title: const Text('Include screenshot artifact'),
+                  ),
+                ],
                 DropdownButtonFormField<String>(
                   isExpanded: true,
                   key: ValueKey('region:$_region:${_regions.toString()}'),
@@ -214,6 +397,12 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
                 TextFormField(
                   controller: _count,
                   keyboardType: TextInputType.number,
+                  enabled:
+                      !_busy &&
+                      ![
+                        'PUBLIC_DATA_FETCH',
+                        'BROWSER_PAGE_INSPECT',
+                      ].contains(_service),
                   decoration: const InputDecoration(
                     labelText: 'Execution count',
                   ),

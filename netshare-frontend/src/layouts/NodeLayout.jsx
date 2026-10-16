@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Activity,
   Radio,
   Wallet,
   Store,
+  ReceiptText,
   LogOut,
   Network,
   Cpu,
@@ -19,6 +20,7 @@ import "./NodeLayout.css";
 function NodeLayout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [nodeStatus, setNodeStatus] = useState("inactive");
   const [deviceName, setDeviceName] = useState("");
 
@@ -51,6 +53,20 @@ function NodeLayout({ children }) {
     navigate("/login");
   };
 
+  const currentPage = location.pathname.startsWith("/node/session")
+    ? { title: "Live Session", subtitle: "Monitor node health, assigned work, and verified session telemetry." }
+    : location.pathname.startsWith("/node/participation")
+      ? { title: "Participation Settings", subtitle: "Control when this device contributes to the NetShare network." }
+      : location.pathname.startsWith("/node/wallet")
+        ? { title: "Earnings & Wallet", subtitle: "Review earned credits and your node activity ledger." }
+          : location.pathname.startsWith("/node/marketplace")
+          ? { title: "Marketplace", subtitle: "Browse available rewards and digital goods." }
+            : location.pathname.startsWith("/node/orders")
+              ? { title: "Marketplace Orders", subtitle: "Review your redeemed rewards and fulfillment updates." }
+              : location.pathname.startsWith("/disputes")
+                ? { title: "Disputes", subtitle: "Submit and track reviews for your participant activity." }
+                : { title: `Welcome, ${user?.name || "Participant"}`, subtitle: "Earn credits by contributing bandwidth to secure web testing." };
+
   return (
     <div className="node-layout">
       <aside className="node-sidebar">
@@ -65,7 +81,7 @@ function NodeLayout({ children }) {
         </div>
 
         <nav className="node-nav">
-          <NavLink to="/disputes"><Activity size={19} /> Disputes</NavLink>
+          <span className="node-nav-section-label">Network</span>
           <NavLink
             to="/node/dashboard"
             className={({ isActive }) => (isActive ? "active" : "")}
@@ -90,6 +106,7 @@ function NodeLayout({ children }) {
             Live Session
           </NavLink>
 
+          <span className="node-nav-section-label">Earnings & Services</span>
           <NavLink
             to="/node/wallet"
             className={({ isActive }) => (isActive ? "active" : "")}
@@ -99,12 +116,22 @@ function NodeLayout({ children }) {
           </NavLink>
 
           <NavLink
-            to="/client/marketplace"
+            to="/node/marketplace"
             className={({ isActive }) => (isActive ? "active" : "")}
           >
             <Store size={19} />
             Marketplace
           </NavLink>
+
+          <NavLink
+            to="/node/orders"
+            className={({ isActive }) => (isActive ? "active" : "")}
+          >
+            <ReceiptText size={19} />
+            My Orders
+          </NavLink>
+
+          <NavLink to="/disputes"><Activity size={19} /> Disputes</NavLink>
         </nav>
 
         <div className="node-sidebar-card">
@@ -122,8 +149,8 @@ function NodeLayout({ children }) {
       <main className="node-main">
         <header className="node-topbar">
           <div className="node-topbar-left">
-            <h3>Welcome, {user?.name || "Participant"}</h3>
-            <p>Monetize unused bandwidth through controlled, secure web testing.</p>
+            <h3>{currentPage.title}</h3>
+            <p>{currentPage.subtitle}</p>
           </div>
 
           <div className="node-topbar-right">

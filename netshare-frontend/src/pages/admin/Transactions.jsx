@@ -1,5 +1,5 @@
-function Transactions() {
-  return <h1 style={{ padding: "40px" }}>Transactions</h1>;
-}
+import AdminDataPage from "./AdminDataPage";
 
-export default Transactions;
+export default function Transactions() {
+  return <AdminDataPage kind="transactions" />;
+}

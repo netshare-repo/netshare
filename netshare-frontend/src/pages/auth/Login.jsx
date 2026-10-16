@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Network, Eye, EyeOff } from "lucide-react";
+import { Sun, Eye, EyeOff, ArrowUpRight } from "lucide-react";
 import axiosInstance from "../../api/axiosInstance";
 import { useAuth } from "../../context/authState";
 import "./Login.css";
@@ -55,62 +55,175 @@ function Login() {
   };
 
   return (
-    <div className="login-page">
-      <div className="login-card-wrapper">
-        <div className="login-brand">
-          <div className="login-logo">
-            <Network size={30} />
-          </div>
-          <h1>NetShare</h1>
-          <p>Client and Admin Web Portal</p>
+    <div className="ps-login-page">
+      {/* Top Header */}
+      <header className="ps-header">
+        <div className="ps-header-inner">
+          <Link to="/" className="ps-brand">
+            <span className="ps-brand-mark" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 2L21.5 7.5V16.5L12 22L2.5 16.5V7.5L12 2Z"
+                  stroke="url(#brandGrad)"
+                  strokeWidth="2.2"
+                  strokeLinejoin="round"
+                />
+                <circle cx="12" cy="12" r="3.2" fill="#28c3d4" />
+                <path
+                  d="M12 8.8V4M12 15.2V20M8.8 13.8L5 16M15.2 10.2L19 8"
+                  stroke="#28c3d4"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
+                <defs>
+                  <linearGradient id="brandGrad" x1="2.5" y1="2" x2="21.5" y2="22" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#28c3d4" />
+                    <stop offset="1" stopColor="#818cf8" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            </span>
+            <span className="ps-brand-name">NetShare</span>
+          </Link>
+
+          <Link to="/" className="ps-nav-link">
+            <Sun size={14} className="ps-nav-sun" />
+            <span>Back to netshare.io</span>
+            <ArrowUpRight size={13} className="ps-nav-arrow" />
+          </Link>
         </div>
+      </header>
 
-        <form className="login-card" onSubmit={handleLogin}>
-          <h2>Welcome Back</h2>
-          <p className="login-subtitle">
-            Login to manage testing tasks, credits, and monitoring.
-          </p>
+      {/* Main Two-Column View */}
+      <main className="ps-main-container">
+        <div className="ps-content-grid">
+          {/* Left Column: Hero Section */}
+          <section className="ps-hero-section">
+            <div className="ps-eyebrow">
+              <span className="ps-eyebrow-dot" />
+              <span>DISTRIBUTED NETWORK INTELLIGENCE</span>
+            </div>
 
-          {error && <div className="login-error">{error}</div>}
+            <h1 className="ps-hero-headline">
+              One network.
+              <br />
+              <span className="ps-hero-italic">Every perspective.</span>
+            </h1>
 
-          <label>Email or verified mobile number</label>
-          <input
-            type="text"
-            name="email"
-            placeholder="Email or +923001234567"
-            value={form.email}
-            onChange={handleChange}
-            required
-          />
+            <p className="ps-hero-description">
+              Access real regional network testing, manage participating devices,
+              <br className="ps-desc-break" />
+              and track results from one secure workspace.
+            </p>
 
-          <label>Password</label>
-          <div className="login-password-box">
-            <input
-              type={showPassword ? "text" : "password"}
-              name="password"
-              placeholder="Enter password"
-              value={form.password}
-              onChange={handleChange}
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </div>
+            <ul className="ps-feature-list">
+              <li className="ps-feature-item">
+                <span className="ps-feature-dot ps-dot-cyan" />
+                <span>Real regional website testing</span>
+              </li>
+              <li className="ps-feature-item">
+                <span className="ps-feature-dot ps-dot-purple" />
+                <span>Secure distributed node network</span>
+              </li>
+              <li className="ps-feature-item">
+                <span className="ps-feature-dot ps-dot-green" />
+                <span>Transparent usage and rewards</span>
+              </li>
+            </ul>
+          </section>
 
-          <button className="login-btn" type="submit" disabled={loading}>
-            {loading ? "Logging in..." : "Login"}
-          </button>
+          {/* Right Column: Login Card */}
+          <section className="ps-card-section">
+            <div className="ps-card">
+              <h2 className="ps-card-title">Welcome back.</h2>
+              <p className="ps-card-subtitle">
+                Login to NetShare to manage your account.
+              </p>
 
-          <p className="login-switch">
-            <Link to="/forgot-password" style={{ display: 'block', marginBottom: '10px' }}>Forgot Password?</Link>
-            New to NetShare? <Link to="/register">Create account</Link>
-          </p>
-        </form>
-      </div>
+              {error && (
+                <div className="ps-alert-error" role="alert">
+                  {error}
+                </div>
+              )}
+
+              <form className="ps-form" onSubmit={handleLogin}>
+                <div className="ps-form-group">
+                  <label htmlFor="ps-email">Username</label>
+                  <input
+                    id="ps-email"
+                    type="text"
+                    name="email"
+                    autoComplete="username"
+                    placeholder="Enter email or mobile number"
+                    value={form.email}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="ps-form-group">
+                  <label htmlFor="ps-password">Password</label>
+                  <div className="ps-password-input-wrapper">
+                    <input
+                      id="ps-password"
+                      type={showPassword ? "text" : "password"}
+                      name="password"
+                      autoComplete="current-password"
+                      placeholder="Enter password"
+                      value={form.password}
+                      onChange={handleChange}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="ps-password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  className="ps-submit-btn"
+                  type="submit"
+                  disabled={loading}
+                >
+                  {loading ? "Logging in..." : "Log in"}
+                </button>
+
+                <div className="ps-card-footer-links">
+                  <p className="ps-link-line">
+                    <span className="ps-link-muted">New to NetShare? </span>
+                    <Link to="/register" className="ps-link-action">
+                      Sign up now &raquo;
+                    </Link>
+                  </p>
+                  <p className="ps-link-line">
+                    <span className="ps-link-muted">Forgot your password? </span>
+                    <Link to="/forgot-password" className="ps-link-action">
+                      Reset your password &raquo;
+                    </Link>
+                  </p>
+                </div>
+              </form>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="ps-footer">
+        <div className="ps-footer-inner">
+          <span className="ps-footer-copy">© 2026 NetShare Inc.</span>
+          <nav className="ps-footer-nav" aria-label="Footer links">
+            <a href="#privacy">Privacy</a>
+            <a href="#terms">Terms</a>
+            <a href="#contact">Contact</a>
+          </nav>
+        </div>
+      </footer>
     </div>
   );
 }

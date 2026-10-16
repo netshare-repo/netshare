@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import logger from './logger.js';
 import { stopTaskWorker } from '../workers/taskWorker.js';
+import { stopRegionalUptimeScheduler } from '../services/regionalUptimeScheduler.js';
 
 let httpServer = null;
 let ioInstance = null;
@@ -39,6 +40,13 @@ export const registerShutdownHandlers = (server, io) => {
       logger.info('Task worker stopped.');
     } catch (err) {
       logger.error({ err }, 'Error stopping task worker');
+    }
+
+    try {
+      stopRegionalUptimeScheduler();
+      logger.info('Regional uptime scheduler stopped.');
+    } catch (err) {
+      logger.error({ err }, 'Error stopping regional uptime scheduler');
     }
     
     // 4. Close MongoDB

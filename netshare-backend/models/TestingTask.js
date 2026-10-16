@@ -24,6 +24,8 @@ const testingTaskSchema = new mongoose.Schema(
         "accessibility_testing",
         "localization_testing",
         "performance_testing",
+        "PUBLIC_DATA_FETCH",
+        "BROWSER_PAGE_INSPECT",
       ],
       required: true,
     },
@@ -33,6 +35,34 @@ const testingTaskSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+
+    browserPageInspect: {
+      contractVersion: { type: Number, default: 1 },
+      viewport: {
+        width: { type: Number, default: 1365 },
+        height: { type: Number, default: 768 },
+        deviceScaleFactor: { type: Number, default: 1 },
+      },
+      pageLoadTimeoutMs: { type: Number, default: 15000 },
+      maxTextBytes: { type: Number, default: 32768 },
+      captureScreenshot: { type: Boolean, default: true },
+    },
+
+    // Internal recurring uptime probe linkage. These tasks use the existing
+    // performance_testing GET executor and are created only by the scheduler.
+    regionalUptimeMonitorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "RegionalUptimeMonitor",
+      default: null,
+      index: true,
+    },
+    regionalUptimeRunId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "RegionalUptimeRun",
+      default: null,
+      index: true,
+    },
+    regionalUptimeRunCost: { type: Number, min: 0, default: null },
 
     executionLimit: {
       type: Number,

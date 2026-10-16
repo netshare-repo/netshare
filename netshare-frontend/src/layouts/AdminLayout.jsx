@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
@@ -17,6 +17,21 @@ import "./AdminLayout.css";
 function AdminLayout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const pageMeta = pathname.startsWith("/admin/marketplace/products")
+    ? ["Marketplace Products", "Manage the catalog and credit pricing."]
+    : pathname.startsWith("/admin/marketplace/orders")
+      ? ["Marketplace Orders", "Review and fulfill customer orders."]
+      : ({
+          "/admin/dashboard": ["Admin Dashboard", "Monitor users, nodes, tasks, credits, and marketplace activity."],
+          "/admin/users": ["Users", "Review accounts, roles, verification, and access."],
+          "/admin/nodes": ["Nodes", "Monitor registered devices and network availability."],
+          "/admin/tasks": ["Tasks", "Review execution activity and task outcomes."],
+          "/admin/transactions": ["Transactions", "Audit credit movements across the platform."],
+          "/admin/payments": ["Payments", "Review top ups and withdrawal requests."],
+          "/admin/operations": ["Operations", "Review alerts, reports, and dispute cases."],
+          "/admin/profile": ["Account Profile", "Manage your administrator profile and security settings."],
+        }[pathname] || ["Admin", "NetShare administration"]);
 
   const handleLogout = () => {
     logout();
@@ -38,7 +53,7 @@ function AdminLayout({ children }) {
         </div>
 
         <nav className="admin-nav">
-          <NavLink to="/admin/operations"><ListChecks size={20} /> Alerts / Reports / Disputes</NavLink>
+          <span className="admin-nav-section-label">Platform</span>
           <NavLink to="/admin/dashboard">
             <LayoutDashboard size={20} />
             Dashboard
@@ -59,6 +74,7 @@ function AdminLayout({ children }) {
             Tasks
           </NavLink>
 
+          <span className="admin-nav-section-label">Finance & Catalog</span>
           <NavLink to="/admin/transactions">
             <Wallet size={20} />
             Transactions
@@ -78,6 +94,12 @@ function AdminLayout({ children }) {
             <PackageCheck size={20} />
             Orders
           </NavLink>
+
+          <span className="admin-nav-section-label">Operations</span>
+          <NavLink to="/admin/operations">
+            <ListChecks size={20} />
+            Alerts & Disputes
+          </NavLink>
         </nav>
 
         <div className="admin-sidebar-card">
@@ -94,8 +116,8 @@ function AdminLayout({ children }) {
       <main className="admin-main">
         <header className="admin-topbar">
           <div>
-            <h3>Admin Dashboard</h3>
-            <p>Monitor users, nodes, tasks, credits, and marketplace.</p>
+            <h3>{pageMeta[0]}</h3>
+            <p>{pageMeta[1]}</p>
           </div>
 
           <div className="admin-topbar-right">

@@ -45,7 +45,14 @@ import { addCredits } from './walletService.js';
 import logger from '../lib/logger.js';
 import config from '../config/env.js';
 import { runTransaction } from '../lib/mongoTransaction.js';
+import { cleanupScreenshotArtifactsForTask } from './screenshotArtifactService.js';
 import { settleTaskResult } from './taskSettlementService.js';
+import { failRegionalUptimeRun } from './regionalUptimeMonitorService.js';
+import { PUBLIC_DATA_FETCH, buildPublicDataFetchRequest, validatePublicDataFetchTarget } from './publicDataFetchService.js';
+import {
+  BROWSER_PAGE_INSPECT, buildBrowserPageInspectRequest,
+  isBrowserPageInspectAvailable, validateBrowserPageInspectTarget,
+} from './browserPageInspectService.js';
 
 // Global settlement lock / set to prevent race conditions during duplicate settlement calls
 const androidRouteContexts = new Map();
@@ -86,7 +93,17 @@ export const prepareAuthorizedTaskSession = async ({ taskId, clientId, nodeId })
   if (authorizedMethod !== 'GET') {
     throw Object.assign(new Error('Only GET requests are supported'), { code: 'UNSUPPORTED_METHOD' });
   }
-  if (!['accessibility_testing', 'performance_testing', 'localization_testing'].includes(task.serviceType)) {
+  if (task.serviceType === PUBLIC_DATA_FETCH) {
+    if (!config.publicDataFetchEnabled) throw Object.assign(new Error('Service unavailable'), { code: 'FEATURE_DISABLED' });
+    await validatePublicDataFetchTarget(task.targetUrl);
+    if (task.executionLimit !== 1) throw Object.assign(new Error('Public fetch requires one execution'), { code: 'INVALID_TASK' });
+  } else if (task.serviceType === BROWSER_PAGE_INSPECT) {
+    if (!isBrowserPageInspectAvailable(config.browserPageInspectEnabled)) {
+      throw Object.assign(new Error('Service unavailable'), { code: 'FEATURE_DISABLED' });
+    }
+    await validateBrowserPageInspectTarget(task.targetUrl);
+    if (task.executionLimit !== 1) throw Object.assign(new Error('Browser inspection requires one execution'), { code: 'INVALID_TASK' });
+  } else if (!['accessibility_testing', 'performance_testing', 'localization_testing'].includes(task.serviceType)) {
     throw Object.assign(new Error(`Unsupported test behavior: ${task.serviceType}`), { code: 'UNSUPPORTED_SERVICE' });
   }
 
@@ -111,6 +128,8 @@ export const prepareAuthorizedTaskSession = async ({ taskId, clientId, nodeId })
     executionLimit: task.executionLimit || 1,
     timeoutMs: 25000,
     issuedAt: new Date().toISOString(),
+    ...(task.serviceType === PUBLIC_DATA_FETCH ? { publicDataFetch: buildPublicDataFetchRequest(task, session) } : {}),
+    ...(task.serviceType === BROWSER_PAGE_INSPECT ? { browserPageInspect: buildBrowserPageInspectRequest(task, session) } : {}),
   };
 
   return { task, session, authToken, taskEnvelope };
@@ -308,6 +327,7 @@ export { settleTaskResult } from './taskSettlementService.js';
  * @param {string} [detail]
  */
 export const handleTaskFailure = async (routingSessionId, taskId, reason, detail = '') => {
+  let taskWasFailed = false;
   try {
     await runTransaction(async transaction => {
       const task = taskId ? await TestingTask.findById(taskId).session(transaction) : null;
@@ -318,8 +338,12 @@ export const handleTaskFailure = async (routingSessionId, taskId, reason, detail
       if (route && (String(route.taskId) !== String(task._id) ||
         String(route.nodeId) !== String(task.assignedNodeId))) return;
       task.status = 'failed';
+      taskWasFailed = true;
       task.resultSummary = { message: `Task failed: ${reason}. ${detail}` };
       await task.save({ session: transaction });
+      if (task.regionalUptimeRunId) {
+        await failRegionalUptimeRun({ task, reason: `${reason}. ${detail}`.trim(), session: transaction });
+      }
       await TaskSession.updateOne({ taskId }, { $set: { status: 'failed' },
         $push: { logs: { message: task.resultSummary.message } } }, { session: transaction });
       if (route && !['completed', 'failed', 'expired'].includes(route.status)) {
@@ -340,6 +364,10 @@ export const handleTaskFailure = async (routingSessionId, taskId, reason, detail
       }
     });
   } finally {
+    if (taskId && taskWasFailed) {
+      await cleanupScreenshotArtifactsForTask(taskId, 'task_failed')
+        .catch(error => logger.error({ err: error, taskId }, 'Screenshot artifact cleanup failed after task failure'));
+    }
     if (routingSessionId) closePeer(String(routingSessionId), `task_failure: ${reason}`);
   }
 };

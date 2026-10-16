@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import 'secure_routing_protocol.dart';
+import 'browser_page_inspect_executor.dart';
+import 'public_data_fetch_executor.dart';
 import 'task_executor_service.dart';
 import 'vpn_service.dart';
 import 'stun_diagnostics.dart';
@@ -20,8 +22,9 @@ class AndroidWebRtcService {
 
   static Future<void> acceptOffer(
     Map<String, dynamic> offer,
-    SignalingEmitter emit,
-  ) async {
+    SignalingEmitter emit, {
+    String? nodeId,
+  }) async {
     final sessionId = offer['routingSessionId']?.toString() ?? '';
     final authToken = offer['authToken']?.toString() ?? '';
     final sdp = offer['sdp']?.toString() ?? '';
@@ -50,6 +53,7 @@ class AndroidWebRtcService {
       authToken: authToken,
       peerConnection: peerConnection,
       emit: emit,
+      nodeId: nodeId ?? '',
     );
     _peers[sessionId] = peer;
 
@@ -143,10 +147,10 @@ class AndroidWebRtcService {
     await peer.dispose();
   }
 
-  static Future<void> closeAll() async {
+  static Future<void> closeAll({bool notifyBackend = true}) async {
     final ids = _peers.keys.toList(growable: false);
     for (final id in ids) {
-      await closeSession(id, notifyBackend: true);
+      await closeSession(id, notifyBackend: notifyBackend);
     }
     _pendingCandidates.clear();
   }
@@ -160,17 +164,21 @@ class _AndroidRoutePeer {
   final String authToken;
   final RTCPeerConnection peerConnection;
   final SignalingEmitter emit;
+  final String nodeId;
   final SecureRoutingProtocol protocol = SecureRoutingProtocol();
   final SecureRouteLifecycle lifecycle = SecureRouteLifecycle();
   RTCDataChannel? dataChannel;
   bool disposed = false;
   bool taskInProgress = false;
+  PublicFetchCancellation? fetchCancellation;
+  BrowserPageInspectCancellation? browserCancellation;
 
   _AndroidRoutePeer({
     required this.sessionId,
     required this.authToken,
     required this.peerConnection,
     required this.emit,
+    required this.nodeId,
   });
 
   void bindDataChannel(RTCDataChannel channel) {
@@ -207,7 +215,20 @@ class _AndroidRoutePeer {
     try {
       task = AuthorizedTaskRequest.fromMessage(message);
     } catch (error) {
+      if (message.payload['serviceType'] == 'PUBLIC_DATA_FETCH' ||
+          message.payload['serviceType'] ==
+              BrowserPageInspectAuthorization.serviceType) {
+        fail('Invalid task authorization: $error');
+        return;
+      }
       await send('task_result', _failurePayload('', 403, error.toString()));
+      return;
+    }
+
+    if ((task.serviceType == 'PUBLIC_DATA_FETCH' ||
+            task.serviceType == BrowserPageInspectAuthorization.serviceType) &&
+        nodeId.isEmpty) {
+      fail('Verified node identity is unavailable');
       return;
     }
 
@@ -222,10 +243,10 @@ class _AndroidRoutePeer {
     if (!AndroidWebRtcService.vpnLease.acquire(sessionId)) {
       await send(
         'task_result',
-        _failurePayload(
-          task.taskId,
-          503,
+        _taskFailure(
+          task,
           'Android VPN is serving another authorized task',
+          legacyStatus: 503,
         ),
       );
       return;
@@ -235,40 +256,77 @@ class _AndroidRoutePeer {
 
     try {
       await send('ack', {'receivedMsgId': message.messageId});
-      final targetError = await TaskExecutorService.validateTarget(
-        task.targetUrl,
-        authorizedHost: task.authorizedHost,
-        authorizedPort: task.authorizedPort,
-        authorizedMethod: task.authorizedMethod,
-      );
-      if (targetError != null) {
+      final isFetch = task.serviceType == 'PUBLIC_DATA_FETCH';
+      final isBrowserInspect =
+          task.serviceType == BrowserPageInspectAuthorization.serviceType;
+      final fetchExecutor = isFetch ? PublicDataFetchExecutor() : null;
+      if (isBrowserInspect) {
+        // Do not start a VPN route or construct a WebView here. The browser
+        // executor fails closed before any DNS lookup, socket, or renderer
+        // exists until all Chromium traffic has an enforceable TUN boundary.
+        final cancellation = BrowserPageInspectCancellation();
+        browserCancellation = cancellation;
+        final result = await BrowserPageInspectExecutor().execute(
+          task,
+          nodeId: nodeId,
+          cancellation: cancellation,
+        );
+        if (disposed || !AndroidWebRtcService.vpnLease.owns(sessionId)) return;
         await send(
           'task_result',
-          _failurePayload(task.taskId, 403, targetError),
+          result.toPayload(
+            taskId: task.taskId,
+            sessionId: sessionId,
+            nodeId: nodeId,
+            targetRegion: task.targetRegion,
+          ),
         );
         lifecycle.transition(SecureRouteState.resultSent);
         return;
+      }
+      if (!isFetch) {
+        final targetError = await TaskExecutorService.validateTarget(
+          task.targetUrl,
+          authorizedHost: task.authorizedHost,
+          authorizedPort: task.authorizedPort,
+          authorizedMethod: task.authorizedMethod,
+        );
+        if (targetError != null) {
+          await send(
+            'task_result',
+            _taskFailure(task, targetError, legacyStatus: 403),
+          );
+          lifecycle.transition(SecureRouteState.resultSent);
+          return;
+        }
       }
 
       if (!await NetShareVpnBridge.checkPermission()) {
         await send(
           'task_result',
-          _failurePayload(
-            task.taskId,
-            503,
+          _taskFailure(
+            task,
             'Android VPN permission is not granted',
+            legacyStatus: 503,
           ),
         );
         lifecycle.transition(SecureRouteState.resultSent);
         return;
       }
 
-      final authorizedIps = await TaskExecutorService.resolveAuthorizedIpv4(
-        task.targetUrl,
-        authorizedHost: task.authorizedHost,
-        authorizedPort: task.authorizedPort,
-        authorizedMethod: task.authorizedMethod,
-      );
+      final authorizedIps = isFetch
+          ? (await fetchExecutor!.resolveRouteIps(
+              Uri.parse(task.targetUrl),
+              authorizedHost: task.authorizedHost,
+              authorizedPort: task.authorizedPort,
+              timeout: Duration(milliseconds: task.timeoutMs),
+            )).map((ip) => ip.address).toList()
+          : await TaskExecutorService.resolveAuthorizedIpv4(
+              task.targetUrl,
+              authorizedHost: task.authorizedHost,
+              authorizedPort: task.authorizedPort,
+              authorizedMethod: task.authorizedMethod,
+            );
 
       if (disposed || !AndroidWebRtcService.vpnLease.owns(sessionId)) {
         throw StateError('Routing session closed');
@@ -290,6 +348,29 @@ class _AndroidRoutePeer {
       );
       await _waitForVpn();
 
+      if (isFetch) {
+        final cancellation = PublicFetchCancellation();
+        fetchCancellation = cancellation;
+        final result = await fetchExecutor!.execute(
+          task,
+          nodeId: nodeId,
+          installedIps: authorizedIps,
+          cancellation: cancellation,
+        );
+        if (disposed || !AndroidWebRtcService.vpnLease.owns(sessionId)) return;
+        await send(
+          'task_result',
+          result.toPayload(
+            taskId: task.taskId,
+            sessionId: sessionId,
+            nodeId: nodeId,
+            targetRegion: task.targetRegion,
+          ),
+        );
+        lifecycle.transition(SecureRouteState.resultSent);
+        return;
+      }
+
       final result = await TaskExecutorService.executeRequestBatch(
         executionLimit: task.executionLimit,
         timeoutMs: task.timeoutMs,
@@ -310,14 +391,17 @@ class _AndroidRoutePeer {
       await send('task_result', payload);
       lifecycle.transition(SecureRouteState.resultSent);
     } catch (error) {
-      await send(
-        'task_result',
-        _failurePayload(task.taskId, 500, error.toString()),
-      );
+      if (!disposed) {
+        await send('task_result', _taskFailure(task, error.toString()));
+      }
       if (lifecycle.state == SecureRouteState.executing) {
         lifecycle.transition(SecureRouteState.resultSent);
       }
     } finally {
+      fetchCancellation?.cancel();
+      fetchCancellation = null;
+      browserCancellation?.cancel();
+      browserCancellation = null;
       await releaseVpn();
       taskInProgress = false;
     }
@@ -346,6 +430,67 @@ class _AndroidRoutePeer {
         );
       });
 
+  Map<String, dynamic> _taskFailure(
+    AuthorizedTaskRequest task,
+    String error, {
+    int legacyStatus = 500,
+  }) {
+    if (task.serviceType == BrowserPageInspectAuthorization.serviceType) {
+      final authorization = task.browserPageInspect;
+      final viewport = authorization?.viewport ??
+          const BrowserViewport(
+            width: 1365,
+            height: 768,
+            deviceScaleFactor: 1,
+          );
+      return BrowserPageInspectResult(
+        success: false,
+        finalUrl: task.targetUrl,
+        httpStatus: 0,
+        pageTitle: null,
+        viewport: viewport,
+        textContent: null,
+        textSizeBytes: 0,
+        screenshotArtifact: null,
+        resourceCount: 0,
+        blockedResourceCount: 0,
+        transferredBytes: 0,
+        ttfbMs: 0,
+        pageLoadTimeMs: 0,
+        totalTimeMs: 0,
+        error: error.length > 500 ? error.substring(0, 500) : error,
+        executedAt: DateTime.now().toUtc(),
+      ).toPayload(
+        taskId: task.taskId,
+        sessionId: sessionId,
+        nodeId: nodeId,
+        targetRegion: task.targetRegion,
+      );
+    }
+    if (task.serviceType != 'PUBLIC_DATA_FETCH') {
+      return _failurePayload(task.taskId, legacyStatus, error);
+    }
+    return PublicDataFetchResult(
+      success: false,
+      httpStatus: 0,
+      content: null,
+      contentType: null,
+      finalUrl: task.targetUrl,
+      responseSizeBytes: 0,
+      ttfbMs: 0,
+      totalTimeMs: 0,
+      downloadMB: 0,
+      uploadMB: 0,
+      error: error.length > 500 ? error.substring(0, 500) : error,
+      executedAt: DateTime.now().toUtc(),
+    ).toPayload(
+      taskId: task.taskId,
+      sessionId: sessionId,
+      nodeId: nodeId,
+      targetRegion: task.targetRegion,
+    );
+  }
+
   Map<String, dynamic> _failurePayload(
     String taskId,
     int statusCode,
@@ -373,6 +518,8 @@ class _AndroidRoutePeer {
 
   void fail(String reason) {
     if (disposed) return;
+    fetchCancellation?.cancel();
+    browserCancellation?.cancel();
     if (lifecycle.state != SecureRouteState.failed &&
         lifecycle.state != SecureRouteState.closed) {
       lifecycle.transition(SecureRouteState.failed);
@@ -389,6 +536,8 @@ class _AndroidRoutePeer {
   Future<void> dispose() async {
     if (disposed) return;
     disposed = true;
+    fetchCancellation?.cancel();
+    browserCancellation?.cancel();
     if (lifecycle.state == SecureRouteState.executing) {
       lifecycle.transition(SecureRouteState.failed);
     }

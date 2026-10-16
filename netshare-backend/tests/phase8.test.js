@@ -211,6 +211,7 @@ describe('Phase 8 release security and replica-set acceptance', () => {
     }
   });
   it('never leaks assigned node API keys in client task details/list', async () => {
+    expect((await request(app).get(`/api/tasks/${task._id}`).set(auth(other))).status).toBe(403);
     for (const path of [`/api/tasks/${task._id}`, '/api/tasks/my-tasks']) {
       const response = await request(app).get(path).set(auth(client));
       expect(response.status).toBe(200);

@@ -8,6 +8,7 @@ import VerifyResetOtp from "../pages/auth/VerifyResetOtp";
 import ResetPassword from "../pages/auth/ResetPassword";
 
 import ClientDashboard from "../pages/client/ClientDashboard";
+import NetworkAvailability from "../pages/client/NetworkAvailability";
 import SubmitTask from "../pages/client/SubmitTask";
 import MyTasks from "../pages/client/MyTasks";
 import TaskDetails from "../pages/client/TaskDetails";
@@ -98,6 +99,28 @@ function AppRoutes() {
         }
       />
 
+      <Route
+        path="/node/marketplace"
+        element={
+          <ProtectedRoute>
+            <RoleRoute allowedRoles={["node_participant", "both", "admin"]}>
+              <Marketplace />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/node/orders"
+        element={
+          <ProtectedRoute>
+            <RoleRoute allowedRoles={["node_participant", "both", "admin"]}>
+              <MyOrders />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+
       {/* Client & Both Routes */}
       <Route
         path="/client/dashboard"
@@ -105,6 +128,17 @@ function AppRoutes() {
           <ProtectedRoute>
             <RoleRoute allowedRoles={["platform_client", "both"]}>
               <ClientDashboard />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/client/network-availability"
+        element={
+          <ProtectedRoute>
+            <RoleRoute allowedRoles={["platform_client", "both"]}>
+              <NetworkAvailability />
             </RoleRoute>
           </ProtectedRoute>
         }

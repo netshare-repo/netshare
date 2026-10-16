@@ -14,6 +14,7 @@ function RegionAvailabilityPanel({
   stale,
   selectedRegion,
   compact = false,
+  marquee = false,
 }) {
   const displayedRegions = useMemo(() => {
     if (!selectedRegion) return availability;
@@ -25,6 +26,24 @@ function RegionAvailabilityPanel({
   const updatedLabel = lastUpdated
     ? `Updated ${new Date(lastUpdated).toLocaleTimeString()}`
     : "Waiting for first update";
+  const shouldMarquee = marquee && displayedRegions.length > 1;
+
+  const renderRegionCard = (region, duplicate = false) => (
+    <article className="region-availability-card" key={`${region.region}-${duplicate ? "copy" : "main"}`}>
+      <div className="region-availability-card-heading">
+        <h3>{region.region}</h3>
+        <span className={`region-state ${region.available ? "online" : "offline"}`}>
+          {region.available ? "Available" : "Unavailable"}
+        </span>
+      </div>
+      <div className="region-metrics">
+        <div><strong>{region.eligibleNodes ?? 0}</strong><span>Eligible nodes</span></div>
+        <div><strong>{region.availableSlots ?? 0}</strong><span>Open slots</span></div>
+        <div><strong>{formatMetric(region.averageLatencyMs, " ms")}</strong><span>Average latency</span></div>
+        <div><strong>{formatMetric(region.averageReliability, "%")}</strong><span>Average reliability</span></div>
+      </div>
+    </article>
+  );
 
   return (
     <section className={`region-availability ${compact ? "compact" : ""}`} aria-labelledby="availability-title">
@@ -60,23 +79,21 @@ function RegionAvailabilityPanel({
       )}
 
       {displayedRegions.length > 0 && (
-        <div className="region-availability-grid">
-          {displayedRegions.map((region) => (
-            <article className="region-availability-card" key={region.region}>
-              <div className="region-availability-card-heading">
-                <h3>{region.region}</h3>
-                <span className={`region-state ${region.available ? "online" : "offline"}`}>
-                  {region.available ? "Available" : "Unavailable"}
-                </span>
+        <div
+          className={`region-availability-grid${shouldMarquee ? " is-marquee" : ""}`}
+          tabIndex={shouldMarquee ? 0 : undefined}
+          aria-label={shouldMarquee ? "Regional availability cards. Focus or hover to pause." : undefined}
+        >
+          {shouldMarquee ? (
+            <div className="region-availability-track">
+              <div className="region-availability-group">
+                {displayedRegions.map((region) => renderRegionCard(region))}
               </div>
-              <div className="region-metrics">
-                <div><strong>{region.eligibleNodes ?? 0}</strong><span>Eligible nodes</span></div>
-                <div><strong>{region.availableSlots ?? 0}</strong><span>Open slots</span></div>
-                <div><strong>{formatMetric(region.averageLatencyMs, " ms")}</strong><span>Average latency</span></div>
-                <div><strong>{formatMetric(region.averageReliability, "%")}</strong><span>Average reliability</span></div>
+              <div className="region-availability-group" aria-hidden="true">
+                {displayedRegions.map((region) => renderRegionCard(region, true))}
               </div>
-            </article>
-          ))}
+            </div>
+          ) : displayedRegions.map((region) => renderRegionCard(region))}
         </div>
       )}
 

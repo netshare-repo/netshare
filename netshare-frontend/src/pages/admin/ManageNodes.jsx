@@ -1,5 +1,5 @@
-function ManageNodes() {
-  return <h1 style={{ padding: "40px" }}>Manage Nodes</h1>;
-}
+import AdminDataPage from "./AdminDataPage";
 
-export default ManageNodes;
+export default function ManageNodes() {
+  return <AdminDataPage kind="nodes" />;
+}

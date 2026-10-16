@@ -12,6 +12,17 @@ import { closePeer } from './webrtcPeerService.js';
 import config from '../config/env.js';
 import { recordAlert } from './anomalyService.js';
 import logger from '../lib/logger.js';
+import { PUBLIC_DATA_FETCH, PUBLIC_DATA_FETCH_VERSION, assertPublicDataFetchIdentity, validatePublicDataFetchResult } from './publicDataFetchService.js';
+import {
+  BROWSER_PAGE_INSPECT, BROWSER_PAGE_INSPECT_VERSION,
+  assertBrowserPageInspectIdentity, validateBrowserPageInspectResult,
+} from './browserPageInspectService.js';
+import {
+  cleanupScreenshotArtifactsForTask,
+  registerScreenshotArtifact,
+  verifyScreenshotArtifact,
+} from './screenshotArtifactService.js';
+import { settleRegionalUptimeRun } from './regionalUptimeMonitorService.js';
 
 const invalid = (message, code = 'INVALID_RESULT') => Object.assign(new Error(message), { code });
 
@@ -135,6 +146,8 @@ export const settleTaskResult = async (routingSessionId, payload) => {
         (payload.targetRegion && payload.targetRegion !== task.targetRegion)) {
       throw invalid('Result payload does not match the assigned route', 'BINDING_MISMATCH');
     }
+    if (task.serviceType === PUBLIC_DATA_FETCH) assertPublicDataFetchIdentity(task, route, payload);
+    if (task.serviceType === BROWSER_PAGE_INSPECT) assertBrowserPageInspectIdentity(task, route, payload);
     const existing = await TaskResult.findOne({ taskId: task._id }).session(transaction);
     if (existing) return { taskResult: existing, settled: false };
     if (!['assigned', 'running'].includes(task.status) || ['failed', 'expired', 'completed'].includes(route.status) ||
@@ -144,7 +157,41 @@ export const settleTaskResult = async (routingSessionId, payload) => {
     const node = await NodeDevice.findById(route.nodeId).session(transaction);
     if (!node) throw invalid('Node not found', 'NODE_NOT_FOUND');
     if (bandwidth + upload > Math.max(0, node.bandwidthLimitMB - node.usedBandwidthMB)) throw invalid('Bandwidth limit exceeded');
-    const resultData = validatedResultData(task, node, payload.resultData);
+    const publicFetch = task.serviceType === PUBLIC_DATA_FETCH
+      ? await validatePublicDataFetchResult(task, route, payload) : null;
+    const browserInspect = task.serviceType === BROWSER_PAGE_INSPECT
+      ? await validateBrowserPageInspectResult(task, route, payload, { verifyScreenshotArtifact }) : null;
+    const resultData = browserInspect ? {
+      schemaVersion: BROWSER_PAGE_INSPECT_VERSION,
+      serviceType: BROWSER_PAGE_INSPECT,
+      targetRegion: task.targetRegion,
+      nodeRegion: node.region,
+      finalUrl: browserInspect.finalUrl,
+      httpStatus: browserInspect.httpStatus,
+      pageTitle: browserInspect.pageTitle,
+      viewport: browserInspect.viewport,
+      textSizeBytes: browserInspect.textSizeBytes,
+      screenshotArtifactId: browserInspect.screenshotArtifact?.artifactId ?? null,
+      resourceCount: browserInspect.resourceCount,
+      blockedResourceCount: browserInspect.blockedResourceCount,
+      transferredBytes: browserInspect.transferredBytes,
+      ttfbMs: browserInspect.ttfbMs,
+      pageLoadTimeMs: browserInspect.pageLoadTimeMs,
+      totalTimeMs: browserInspect.totalTimeMs,
+      error: browserInspect.error,
+    } : publicFetch ? {
+      schemaVersion: PUBLIC_DATA_FETCH_VERSION,
+      serviceType: PUBLIC_DATA_FETCH,
+      targetRegion: task.targetRegion,
+      nodeRegion: node.region,
+      finalUrl: publicFetch.finalUrl,
+      contentType: publicFetch.contentType,
+      responseSizeBytes: publicFetch.responseSizeBytes,
+      httpStatus: publicFetch.httpStatus,
+      ttfbMs: publicFetch.ttfbMs,
+      totalTimeMs: publicFetch.totalTimeMs,
+      error: publicFetch.error,
+    } : validatedResultData(task, node, payload.resultData);
     if (resultData.schemaVersion === 2 &&
         (payload.success !== (resultData.completedExecutions === task.executionLimit &&
           resultData.attemptedExecutions === task.executionLimit) ||
@@ -157,9 +204,58 @@ export const settleTaskResult = async (routingSessionId, payload) => {
       serviceType: task.serviceType, targetUrl: task.targetUrl, success: payload.success,
       successRate, latencyMs: latency, packetLoss, bandwidthUsedMB: bandwidth,
       statusCode, resultData, completedAt: new Date(),
+      ...(publicFetch ? { publicFetch: {
+        contractVersion: PUBLIC_DATA_FETCH_VERSION,
+        content: publicFetch.content,
+        contentType: publicFetch.contentType,
+        httpStatus: publicFetch.httpStatus,
+        sourceNodeId: node._id,
+        executedAt: publicFetch.executedAt,
+        responseSizeBytes: publicFetch.responseSizeBytes,
+        ttfbMs: publicFetch.ttfbMs,
+        totalTimeMs: publicFetch.totalTimeMs,
+        finalUrl: publicFetch.finalUrl,
+      } } : {}),
+      ...(browserInspect ? { browserPageInspect: {
+        contractVersion: BROWSER_PAGE_INSPECT_VERSION,
+        finalUrl: browserInspect.finalUrl,
+        httpStatus: browserInspect.httpStatus,
+        pageTitle: browserInspect.pageTitle,
+        viewport: browserInspect.viewport,
+        textContent: browserInspect.textContent,
+        textSizeBytes: browserInspect.textSizeBytes,
+        screenshotArtifact: browserInspect.screenshotArtifact,
+        sourceNodeId: node._id,
+        executedAt: browserInspect.executedAt,
+        resourceCount: browserInspect.resourceCount,
+        blockedResourceCount: browserInspect.blockedResourceCount,
+        transferredBytes: browserInspect.transferredBytes,
+        ttfbMs: browserInspect.ttfbMs,
+        pageLoadTimeMs: browserInspect.pageLoadTimeMs,
+        totalTimeMs: browserInspect.totalTimeMs,
+        error: browserInspect.error,
+      } } : {}),
     }], { session: transaction });
+    if (browserInspect?.screenshotArtifact) {
+      await registerScreenshotArtifact({
+        reference: browserInspect.screenshotArtifact,
+        taskId: task._id,
+        nodeId: node._id,
+        routingSessionId: route._id,
+        taskResultId: result._id,
+        session: transaction,
+      });
+    }
+    const regionalUptimeRun = task.regionalUptimeRunId
+      ? await settleRegionalUptimeRun({ task, node, payload, session: transaction })
+      : null;
+    // Uptime probes measure unexpected HTTP codes as useful completed samples.
+    // Only a real HTTP response counts as completed node work; transport failures
+    // remain failed and release the reserved monitor unit.
+    const taskWorkCompleted = Boolean(payload.success || (regionalUptimeRun &&
+      Number.isInteger(statusCode) && statusCode >= 100 && statusCode <= 599));
     let reward = 0;
-    if (payload.success) {
+    if (taskWorkCompleted) {
       reward = Math.max(1, calculateReward({ bandwidthUsedMB: bandwidth, node, targetRegion: task.targetRegion }).reward);
       await addCredits({ userId: node.userId, taskId: task._id, amount: reward,
         description: `Secure task reward: ${task._id}`, idempotencyKey: `task-reward:${task._id}`,
@@ -168,16 +264,16 @@ export const settleTaskResult = async (routingSessionId, payload) => {
     await BandwidthUsage.create([{ nodeId: node._id, taskId: task._id, sessionId: String(route._id),
       uploadBandwidthMB: upload, downloadBandwidthMB: bandwidth, totalBandwidthMB: upload + bandwidth,
       networkAvailability: 'available', timestamp: new Date() }], { session: transaction });
-    task.status = payload.success ? 'settled' : 'failed';
+    task.status = taskWorkCompleted ? 'settled' : 'failed';
     task.resultSummary = { successRate, averageResponseTimeMs: latency, bandwidthConsumedMB: bandwidth,
-      message: payload.success ? `Secure task completed. Reward: ${reward} credits.` : (resultData?.error || 'Secure task failed') };
+      message: taskWorkCompleted ? `Secure task completed. Reward: ${reward} credits.` : (resultData?.error || 'Secure task failed') };
     await task.save({ session: transaction });
-    await TaskSession.updateOne({ taskId: task._id }, { $set: { status: payload.success ? 'completed' : 'failed',
+    await TaskSession.updateOne({ taskId: task._id }, { $set: { status: taskWorkCompleted ? 'completed' : 'failed',
       bandwidthUsedMB: bandwidth, latencyMs: latency }, $push: { logs: { message: task.resultSummary.message } } }, { session: transaction });
     const previousState = route.status;
-    route.status = payload.success ? 'completed' : 'failed';
+    route.status = taskWorkCompleted ? 'completed' : 'failed';
     route.endedAt = new Date();
-    route.closeReason = payload.success ? 'task_completed' : 'task_failed';
+    route.closeReason = taskWorkCompleted ? 'task_completed' : 'task_failed';
     route.stateHistory.push({ from: previousState, to: route.status, reason: task.resultSummary.message, timestamp: new Date() });
     await route.save({ session: transaction });
     node.usedBandwidthMB += bandwidth + upload;
@@ -189,7 +285,7 @@ export const settleTaskResult = async (routingSessionId, payload) => {
       $inc: { bandwidthUsed: bandwidth + upload, bandwidthUsedMB: bandwidth + upload, creditsEarned: reward },
       $set: { latency, packetLoss, activeTasksCount: node.currentActiveTasks },
     }, { session: transaction });
-    return { taskResult: result, settled: payload.success };
+    return { taskResult: result, settled: taskWorkCompleted };
   }); } catch (error) {
     if (!error.code || error.status === 503 || error.status === 409) {
       await recordAlert({ dedupKey: `settlement-review:${payload.taskId}`, alertType: 'settlement_failure',
@@ -198,6 +294,14 @@ export const settleTaskResult = async (routingSessionId, payload) => {
       }).catch(alertError => logger.error({ err: alertError, taskId: payload.taskId }, 'Settlement review alert could not be persisted'));
     }
     throw error;
+  }
+  if (payload.serviceType === BROWSER_PAGE_INSPECT) {
+    const keepArtifactId = outcome.taskResult?.browserPageInspect?.screenshotArtifact?.artifactId ?? null;
+    await cleanupScreenshotArtifactsForTask(
+      payload.taskId,
+      payload.success ? 'superseded' : 'task_failed',
+      keepArtifactId,
+    ).catch(error => logger.error({ err: error, taskId: payload.taskId }, 'Screenshot artifact cleanup failed after settlement'));
   }
   closePeer(String(routingSessionId), 'task_result_committed');
   return outcome;

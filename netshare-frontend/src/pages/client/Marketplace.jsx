@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
-import { Store, Coins, Package, ShoppingCart, RefreshCw } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { Store, Coins, ShoppingCart, RefreshCw, ReceiptText } from "lucide-react";
 import ClientLayout from "../../layouts/ClientLayout";
+import NodeLayout from "../../layouts/NodeLayout";
+import { useAuth } from "../../context/authState";
 import {
   createMarketplaceOrder,
   getMarketplaceProducts,
@@ -8,6 +11,11 @@ import {
 import "./Marketplace.css";
 
 function Marketplace() {
+  const location = useLocation();
+  const { user } = useAuth();
+  const isNodeExperience = location.pathname.startsWith("/node/") || user?.role === "node_participant";
+  const Layout = isNodeExperience ? NodeLayout : ClientLayout;
+  const ordersPath = isNodeExperience ? "/node/orders" : "/client/orders";
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [buyingId, setBuyingId] = useState("");
@@ -51,65 +59,95 @@ function Marketplace() {
   }, []);
 
   return (
-    <ClientLayout>
-      <div className="market-page">
-        <div className="market-header">
+    <Layout pageTitle="Marketplace" pageSubtitle="">
+      <div className="ps-market-page">
+        {/* Header */}
+        <div className="ps-page-header">
           <div>
-            <h2>Credit Marketplace</h2>
-            <p>Redeem your NetShare credits for digital services and vouchers.</p>
+            <h1 className="ps-page-title">Credit Marketplace</h1>
+            <p className="ps-page-subtitle">
+              Redeem your available NetShare credits for digital perks and partner services.
+            </p>
           </div>
 
-          <button onClick={loadProducts} className="market-refresh-btn">
-            <RefreshCw size={18} />
-            Refresh
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button type="button" onClick={loadProducts} className="ps-btn-dark">
+              <RefreshCw size={14} />
+              <span>Refresh</span>
+            </button>
+            <Link to={ordersPath} className="ps-btn-dark">
+              <ReceiptText size={15} />
+              <span>My Orders</span>
+            </Link>
+          </div>
         </div>
 
-        {message && <div className="market-message">{message}</div>}
+        {message && (
+          <div className="ps-alert success">
+            <span>{message}</span>
+          </div>
+        )}
 
         {loading ? (
-          <div className="market-loading">Loading marketplace products...</div>
+          <div className="ps-loading-state">Loading marketplace offerings...</div>
         ) : products.length === 0 ? (
-          <div className="market-empty">
-            <Store size={48} />
-            <h3>No products available</h3>
-            <p>Admin has not added marketplace products yet.</p>
+          <div className="ps-card ps-empty-market-card">
+            <Store size={38} style={{ color: "#06b6d4", marginBottom: 12 }} />
+            <h3 className="ps-card-title">No Marketplace Offerings</h3>
+            <p className="ps-desc-text" style={{ maxWidth: 420, margin: "8px auto 0" }}>
+              Digital goods and service vouchers will appear here when posted by the
+              platform administration.
+            </p>
           </div>
         ) : (
-          <div className="market-grid">
+          <div className="ps-market-grid">
             {products.map((product) => (
-              <div className="market-card" key={product._id}>
-                <div className="market-card-icon">
-                  <Store size={32} />
+              <div className="ps-card ps-product-card" key={product._id}>
+                <div className="ps-card-decor" aria-hidden="true">
+                  <div className="ps-card-decor-outer" />
                 </div>
 
-                <div className="market-card-body">
-                  <span className="market-category">
-                    {product.category?.replaceAll("_", " ")}
+                <div className="ps-card-header-clean">
+                  <span className="ps-meta-label">
+                    {product.category?.replaceAll("_", " ") || "DIGITAL SERVICE"}
                   </span>
+                  <h3 className="ps-card-title" style={{ marginTop: 6, fontSize: 18 }}>
+                    {product.name}
+                  </h3>
+                </div>
 
-                  <h3>{product.name}</h3>
-                  <p>{product.description}</p>
+                <p className="ps-desc-text" style={{ margin: "12px 0 20px", minHeight: 44 }}>
+                  {product.description}
+                </p>
 
-                  <div className="market-meta">
-                    <span>
-                      <Coins size={17} />
-                      {product.requiredCredits} Credits
-                    </span>
-
-                    <span>
-                      <Package size={17} />
-                      Stock: {product.stock}
-                    </span>
+                <div className="ps-product-meta-row">
+                  <div className="ps-product-cost">
+                    <Coins size={16} style={{ color: "#06b6d4" }} />
+                    <strong>{product.requiredCredits}</strong>
+                    <small>credits</small>
                   </div>
 
+                  <span className="ps-stock-tag">
+                    Stock: {product.stock}
+                  </span>
+                </div>
+
+                <div style={{ marginTop: 20 }}>
                   <button
+                    type="button"
                     onClick={() => handleBuy(product)}
-                    disabled={buyingId === product._id}
-                    className="market-buy-btn"
+                    disabled={buyingId === product._id || product.stock <= 0}
+                    className="ps-btn-white"
+                    style={{ width: "100%", height: 42 }}
                   >
-                    <ShoppingCart size={18} />
-                    {buyingId === product._id ? "Buying..." : "Buy Now"}
+                    <ShoppingCart size={15} />
+                    <span>
+                      {buyingId === product._id
+                        ? "Processing..."
+                        : product.stock <= 0
+                        ? "Out of Stock"
+                        : "Redeem Now"}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -117,7 +155,7 @@ function Marketplace() {
           </div>
         )}
       </div>
-    </ClientLayout>
+    </Layout>
   );
 }
 

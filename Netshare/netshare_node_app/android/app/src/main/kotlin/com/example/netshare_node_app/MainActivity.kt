@@ -45,29 +45,36 @@ class MainActivity : FlutterActivity(), NetShareVpnService.VpnStateListener {
     private var eventSink: EventChannel.EventSink? = null
     private var pendingDocumentResult: MethodChannel.Result? = null
     private var pendingCsv: String? = null
+    private var pendingPng: ByteArray? = null
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "io.netshare.app/documents").setMethodCallHandler { call, result ->
             if (pendingDocumentResult != null) {
                 result.error("DOCUMENT_BUSY", "A document operation is already in progress", null)
-            } else if (call.method == "pickProof" || call.method == "saveCsv") {
-                val saving = call.method == "saveCsv"
-                val content = call.argument<String>("content")
-                if (saving && (content == null || content.toByteArray(Charsets.UTF_8).size > 2 * 1024 * 1024)) {
+            } else if (call.method == "pickProof" || call.method == "saveCsv" || call.method == "saveText" || call.method == "savePng") {
+                val saving = call.method == "saveCsv" || call.method == "saveText" || call.method == "savePng"
+                val content: String? = if (call.method == "savePng") null else call.argument("content")
+                val png: ByteArray? = if (call.method == "savePng") call.argument("content") else null
+                val mimeType = if (call.method == "saveText") call.argument<String>("mimeType") ?: "text/plain" else if (call.method == "savePng") "image/png" else "text/csv"
+                if ((call.method == "savePng" && (png == null || png.isEmpty() || png.size > 2 * 1024 * 1024)) ||
+                    (saving && call.method != "savePng" && (content == null || content.toByteArray(Charsets.UTF_8).size > 2 * 1024 * 1024))) {
                     result.error("INVALID_REPORT", "Report is missing or exceeds 2 MB", null)
+                } else if (call.method == "saveText" && mimeType != "text/plain") {
+                    result.error("INVALID_TEXT_TYPE", "Fetched content must be saved as plain text", null)
                 } else {
                     pendingDocumentResult = result
                     pendingCsv = if (saving) content else null
+                    pendingPng = if (call.method == "savePng") png else null
                     val intent = Intent(if (saving) Intent.ACTION_CREATE_DOCUMENT else Intent.ACTION_OPEN_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
-                        type = if (saving) "text/csv" else "*/*"
-                        if (saving) putExtra(Intent.EXTRA_TITLE, call.argument<String>("filename") ?: "netshare-report.csv")
+                        type = if (call.method == "saveText") "text/plain" else if (call.method == "savePng") "image/png" else if (saving) "text/csv" else "*/*"
+                        if (saving) putExtra(Intent.EXTRA_TITLE, call.argument<String>("filename") ?: if (call.method == "savePng") "netshare-screenshot.png" else "netshare-report.csv")
                         else putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/png", "image/jpeg", "application/pdf"))
                     }
                     try { startActivityForResult(intent, if (saving) CSV_REQUEST_CODE else PROOF_REQUEST_CODE) }
                     catch (error: Exception) {
-                        pendingDocumentResult = null; pendingCsv = null
+                        pendingDocumentResult = null; pendingCsv = null; pendingPng = null
                         result.error("PICKER_UNAVAILABLE", "Could not open the document picker", null)
                     }
                 }
@@ -107,6 +114,7 @@ class MainActivity : FlutterActivity(), NetShareVpnService.VpnStateListener {
         pendingDocumentResult?.error("ACTIVITY_CLOSED", "Document activity closed; retry the operation", null)
         pendingDocumentResult = null
         pendingCsv = null
+        pendingPng = null
         super.onDestroy()
     }
 
@@ -253,15 +261,18 @@ class MainActivity : FlutterActivity(), NetShareVpnService.VpnStateListener {
             val result = pendingDocumentResult ?: return
             val uri = data?.data
             val csv = pendingCsv
+            val png = pendingPng
             if (resultCode != Activity.RESULT_OK || uri == null) {
-                pendingDocumentResult = null; pendingCsv = null
+                pendingDocumentResult = null; pendingCsv = null; pendingPng = null
                 result.success(if (requestCode == CSV_REQUEST_CODE) false else null)
                 return
             }
             Thread {
                 try {
                     val payload: Any = if (requestCode == CSV_REQUEST_CODE) {
-                        contentResolver.openOutputStream(uri, "wt")?.use { it.write((csv ?: "").toByteArray(Charsets.UTF_8)) }
+                        contentResolver.openOutputStream(uri, "wt")?.use {
+                            if (png != null) it.write(png) else it.write((csv ?: "").toByteArray(Charsets.UTF_8))
+                        }
                             ?: throw IllegalStateException("Cannot write selected document")
                         true
                     } else {
@@ -283,9 +294,9 @@ class MainActivity : FlutterActivity(), NetShareVpnService.VpnStateListener {
                         } ?: throw IllegalStateException("Cannot read selected document")
                         mapOf("mime" to mime, "base64" to Base64.encodeToString(bytes, Base64.NO_WRAP), "size" to bytes.size)
                     }
-                    runOnUiThread { if (pendingDocumentResult === result) { pendingDocumentResult = null; pendingCsv = null; result.success(payload) } }
+                    runOnUiThread { if (pendingDocumentResult === result) { pendingDocumentResult = null; pendingCsv = null; pendingPng = null; result.success(payload) } }
                 } catch (error: Exception) {
-                    runOnUiThread { if (pendingDocumentResult === result) { pendingDocumentResult = null; pendingCsv = null; result.error("DOCUMENT_FAILED", error.message, null) } }
+                    runOnUiThread { if (pendingDocumentResult === result) { pendingDocumentResult = null; pendingCsv = null; pendingPng = null; result.error("DOCUMENT_FAILED", error.message, null) } }
                 }
             }.start()
             return

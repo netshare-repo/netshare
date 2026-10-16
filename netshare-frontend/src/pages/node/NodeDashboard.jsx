@@ -420,7 +420,7 @@ function NodeDashboard() {
             </button>
           </div>
 
-          <p style={{ fontSize: "0.88rem", color: "#94a3b8", marginBottom: "0.75rem" }}>
+          <p style={{ fontSize: "0.88rem", color: "#a2a6ab", marginBottom: "0.75rem" }}>
             Run the <code>netshare-agent</code> execution daemon on your PC, server, or Docker instance to execute real distributed bandwidth tasks.
           </p>
 
@@ -449,7 +449,7 @@ function NodeDashboard() {
             </button>
           </div>
 
-          <div style={{ marginTop: "0.75rem", fontSize: "0.8rem", color: "#64748b" }}>
+          <div style={{ marginTop: "0.75rem", fontSize: "0.8rem", color: "#777d84" }}>
             CLI: <code>node agent.js --key {apiKey ? `${apiKey.substring(0, 12)}...` : "YOUR_KEY"}</code>
           </div>
         </div>

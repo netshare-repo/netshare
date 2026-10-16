@@ -1,0 +1,34 @@
+.ps-network-availability-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  min-width: 0;
+}
+
+.ps-network-availability-page > .ps-page-header {
+  margin-bottom: 0;
+}
+
+.ps-network-availability-page > .region-availability {
+  margin-top: 0;
+  padding: clamp(20px, 2.4vw, 30px);
+  background:
+    radial-gradient(ellipse 72% 100% at 100% 0%, rgba(6, 182, 212, 0.04), transparent 72%),
+    #080808;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.ps-network-availability-page .region-availability-grid.is-marquee {
+  margin-top: 24px;
+}
+
+@media (max-width: 600px) {
+  .ps-network-availability-page {
+    gap: 18px;
+  }
+
+  .ps-network-availability-page > .region-availability {
+    padding: 18px;
+  }
+}

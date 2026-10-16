@@ -2,7 +2,6 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  font-family: Inter, system-ui, Arial, sans-serif;
 }
 
 html,
@@ -16,6 +15,7 @@ body,
 body {
   background: #f8fafc;
   color: #0f172a;
+  font-family: Inter, system-ui, Arial, sans-serif;
 }
 
 a {

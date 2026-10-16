@@ -13,4 +13,23 @@ class MobileDocumentService {
         'content': csv,
       }) ??
       false;
+
+  static Future<bool> saveText(
+    String filename,
+    String content, {
+    String mimeType = 'text/plain',
+  }) async =>
+      await channel.invokeMethod<bool>('saveText', {
+        'filename': filename,
+        'content': content,
+        'mimeType': mimeType,
+      }) ??
+      false;
+
+  static Future<bool> savePng(String filename, Uint8List bytes) async =>
+      await channel.invokeMethod<bool>('savePng', {
+        'filename': filename,
+        'content': bytes,
+      }) ??
+      false;
 }

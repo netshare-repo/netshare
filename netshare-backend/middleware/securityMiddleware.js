@@ -1,3 +1,4 @@
+
 /**
  * Security Hardening Middleware for NetShare Distributed Infrastructure
  * Implements in-memory token-bucket / sliding window rate limiting, input sanitization,
@@ -92,6 +93,7 @@ export const validateTaskSubmission = (req, res, next) => {
     "accessibility_testing",
     "localization_testing",
     "performance_testing",
+    ...(process.env.PUBLIC_DATA_FETCH_ENABLED === 'true' ? ['PUBLIC_DATA_FETCH'] : []),
   ];
   if (!supportedServices.includes(serviceType)) {
     return res.status(400).json({ message: "Unsupported service type" });

@@ -16,6 +16,12 @@ import { estimateTaskPrice } from "../services/pricingService.js";
 import { runTransaction, supportsMongoTransactions } from '../lib/mongoTransaction.js';
 import { validateTarget } from '../services/targetValidationService.js';
 import logger from '../lib/logger.js';
+import config from '../config/env.js';
+import { PUBLIC_DATA_FETCH, validatePublicDataFetchSubmission, validatePublicDataFetchTarget } from '../services/publicDataFetchService.js';
+import {
+  BROWSER_PAGE_INSPECT, isBrowserPageInspectAvailable, validateBrowserPageInspectSubmission,
+  validateBrowserPageInspectTarget,
+} from '../services/browserPageInspectService.js';
 
 const TRANSACTIONS_UNAVAILABLE_MESSAGE =
   'Task submission is unavailable until MongoDB is configured as a replica set.';
@@ -56,6 +62,11 @@ export const getClientDashboard = async (req, res) => {
   }
 };
 
+export const getTaskCapabilities = (req, res) => res.json({
+  publicDataFetchEnabled: config.publicDataFetchEnabled === true,
+  browserPageInspectEnabled: isBrowserPageInspectAvailable(config.browserPageInspectEnabled),
+});
+
 export const createTask = async (req, res) => {
   try {
     const { targetUrl, serviceType, targetRegion, executionLimit } = req.body;
@@ -65,6 +76,23 @@ export const createTask = async (req, res) => {
         message:
           "targetUrl, serviceType, targetRegion and executionLimit are required",
       });
+    }
+
+    let browserOptions = null;
+    if (serviceType === PUBLIC_DATA_FETCH) {
+      if (!config.publicDataFetchEnabled) return res.status(404).json({ message: 'Service unavailable' });
+      try {
+        validatePublicDataFetchSubmission(req.body);
+        await validatePublicDataFetchTarget(targetUrl);
+      } catch (error) { return res.status(400).json({ message: error.message }); }
+    } else if (serviceType === BROWSER_PAGE_INSPECT) {
+      if (!isBrowserPageInspectAvailable(config.browserPageInspectEnabled)) {
+        return res.status(404).json({ message: 'Service unavailable' });
+      }
+      try {
+        browserOptions = validateBrowserPageInspectSubmission(req.body);
+        await validateBrowserPageInspectTarget(targetUrl);
+      } catch (error) { return res.status(400).json({ message: error.message }); }
     }
 
     if (!isValidUrl(targetUrl)) {
@@ -100,6 +128,7 @@ export const createTask = async (req, res) => {
       targetUrl,
       method: 'GET',
       serviceType,
+      ...(serviceType === BROWSER_PAGE_INSPECT ? { browserPageInspect: browserOptions } : {}),
       targetRegion,
       executionLimit,
       estimatedCost,

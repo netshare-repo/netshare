@@ -77,6 +77,54 @@ const taskResultSchema = new mongoose.Schema(
       default: {},
     },
 
+    publicFetch: {
+      contractVersion: { type: Number },
+      content: { type: String, validate: {
+        validator: value => value == null || Buffer.byteLength(value, 'utf8') <= 16 * 1024,
+        message: 'Public fetch content exceeds 16 KiB',
+      } },
+      contentType: { type: String, maxlength: 100 },
+      httpStatus: { type: Number },
+      sourceNodeId: { type: mongoose.Schema.Types.ObjectId, ref: 'NodeDevice' },
+      executedAt: { type: Date },
+      responseSizeBytes: { type: Number, min: 0, max: 16 * 1024 },
+      ttfbMs: { type: Number, min: 0 },
+      totalTimeMs: { type: Number, min: 0 },
+      finalUrl: { type: String, maxlength: 2048 },
+    },
+
+    browserPageInspect: {
+      contractVersion: { type: Number },
+      finalUrl: { type: String, maxlength: 2048 },
+      httpStatus: { type: Number, min: 0, max: 599 },
+      pageTitle: { type: String, maxlength: 512 },
+      viewport: {
+        width: { type: Number, min: 320, max: 1920 },
+        height: { type: Number, min: 320, max: 2160 },
+        deviceScaleFactor: { type: Number, enum: [1, 1.5, 2] },
+      },
+      textContent: { type: String, validate: {
+        validator: value => value == null || Buffer.byteLength(value, 'utf8') <= 32 * 1024,
+        message: 'Browser extracted text exceeds 32 KiB',
+      } },
+      textSizeBytes: { type: Number, min: 0, max: 32 * 1024 },
+      screenshotArtifact: {
+        artifactId: { type: String, match: /^[a-f0-9]{32}$/ },
+        contentType: { type: String, enum: ['image/png'] },
+        sizeBytes: { type: Number, min: 1, max: 2 * 1024 * 1024 },
+        sha256: { type: String, match: /^[a-f0-9]{64}$/ },
+      },
+      sourceNodeId: { type: mongoose.Schema.Types.ObjectId, ref: 'NodeDevice' },
+      executedAt: { type: Date },
+      resourceCount: { type: Number, min: 0, max: 64 },
+      blockedResourceCount: { type: Number, min: 0, max: 64 },
+      transferredBytes: { type: Number, min: 0, max: 8 * 1024 * 1024 },
+      ttfbMs: { type: Number, min: 0 },
+      pageLoadTimeMs: { type: Number, min: 0, max: 20000 },
+      totalTimeMs: { type: Number, min: 0, max: 30000 },
+      error: { type: String, maxlength: 500 },
+    },
+
     completedAt: {
       type: Date,
       default: Date.now,

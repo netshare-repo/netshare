@@ -1,5 +1,5 @@
-function ManageTasks() {
-  return <h1 style={{ padding: "40px" }}>Manage Tasks</h1>;
-}
+import AdminDataPage from "./AdminDataPage";
 
-export default ManageTasks;
+export default function ManageTasks() {
+  return <AdminDataPage kind="tasks" />;
+}

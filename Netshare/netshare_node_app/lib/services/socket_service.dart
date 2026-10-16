@@ -63,7 +63,11 @@ class NodeSocketService {
       try {
         final offer = Map<String, dynamic>.from(data);
         onLog?.call('Received authenticated Android WebRTC offer');
-        await AndroidWebRtcService.acceptOffer(offer, _emitSignaling);
+        await AndroidWebRtcService.acceptOffer(
+          offer,
+          _emitSignaling,
+          nodeId: _currentNodeId,
+        );
       } catch (error) {
         onLog?.call('WebRTC offer rejected: $error');
       }
@@ -89,6 +93,7 @@ class NodeSocketService {
 
     socket.onDisconnect((reason) {
       _isConnected = false;
+      unawaited(AndroidWebRtcService.closeAll(notifyBackend: false));
       onStatusChange?.call(false);
       onLog?.call("Disconnected from server: $reason");
       _stopHeartbeat();

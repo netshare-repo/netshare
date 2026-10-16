@@ -17,6 +17,9 @@ export class AppError extends Error {
  * Map Mongoose/MongoDB errors to user-safe responses.
  */
 const classifyError = (err) => {
+  if (err?.type === 'entity.too.large') {
+    return { statusCode: 413, code: 'PAYLOAD_TOO_LARGE', message: 'Screenshot exceeds the configured upload limit.' };
+  }
   // Mongoose validation error
   if (err.name === 'ValidationError') {
     const messages = Object.values(err.errors).map(e => e.message).join(', ');
@@ -45,6 +48,9 @@ const classifyError = (err) => {
   // Our custom AppError
   if (err instanceof AppError) {
     return { statusCode: err.statusCode, code: err.code, message: err.message };
+  }
+  if (err?.isOperational && Number.isInteger(err.statusCode) && err.statusCode >= 400 && err.statusCode <= 599) {
+    return { statusCode: err.statusCode, code: err.code || 'REQUEST_REJECTED', message: err.message };
   }
   
   // Default

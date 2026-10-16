@@ -25,7 +25,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #64748b;
+  background: #777d84;
 }
 
 .pill-dot.live {
@@ -88,7 +88,7 @@
 }
 
 .hero-banner-info p {
-  color: #94a3b8;
+  color: #a2a6ab;
   font-size: 14px;
   margin: 0;
   max-width: 560px;
@@ -187,7 +187,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #38bdf8;
+  color: #28c3d4;
 }
 
 .header-title h3 {
@@ -199,7 +199,7 @@
 
 .quota-tag {
   font-size: 12px;
-  color: #94a3b8;
+  color: #a2a6ab;
   background: rgba(255, 255, 255, 0.04);
   padding: 4px 10px;
   border-radius: 6px;
@@ -221,7 +221,7 @@
 
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #3b82f6, #10b981);
+  background: linear-gradient(90deg, #06b6d4, #10b981);
   border-radius: 9999px;
   transition: width 0.4s ease;
 }
@@ -230,7 +230,7 @@
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: #94a3b8;
+  color: #a2a6ab;
 }
 
 .node-speed-row {
@@ -252,7 +252,7 @@
 }
 
 .speed-icon.upload {
-  color: #38bdf8;
+  color: #28c3d4;
 }
 
 .speed-icon.download {
@@ -262,7 +262,7 @@
 .speed-label {
   display: block;
   font-size: 11px;
-  color: #64748b;
+  color: #777d84;
   text-transform: uppercase;
 }
 
@@ -277,7 +277,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #38bdf8;
+  color: #28c3d4;
   font-size: 13px;
   text-decoration: none;
   font-weight: 500;
@@ -304,7 +304,7 @@
 }
 
 .session-data-row .label {
-  color: #94a3b8;
+  color: #a2a6ab;
 }
 
 .session-data-row .val {
@@ -315,7 +315,7 @@
 .code-font {
   font-family: monospace;
   font-size: 12px;
-  color: #38bdf8 !important;
+  color: #28c3d4 !important;
 }
 
 .text-green {
@@ -325,7 +325,7 @@
 .no-session-placeholder {
   text-align: center;
   padding: 24px;
-  color: #64748b;
+  color: #777d84;
 }
 
 .quick-start-btn {
@@ -334,7 +334,7 @@
   gap: 8px;
   margin-top: 14px;
   padding: 10px 18px;
-  background: #2563eb;
+  background: #06b6d4;
   color: white;
   border: none;
   border-radius: 8px;
@@ -357,8 +357,8 @@
   width: 70px;
   height: 70px;
   border-radius: 20px;
-  background: rgba(59, 130, 246, 0.12);
-  color: #3b82f6;
+  background: rgba(6, 182, 212, 0.12);
+  color: #06b6d4;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -372,7 +372,7 @@
 }
 
 .node-onboarding-card p {
-  color: #94a3b8;
+  color: #a2a6ab;
   font-size: 14px;
   margin: 0 0 24px;
   line-height: 1.5;
@@ -394,7 +394,7 @@
 .form-group label {
   font-size: 12px;
   font-weight: 500;
-  color: #94a3b8;
+  color: #a2a6ab;
 }
 
 .form-group input,

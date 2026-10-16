@@ -19,6 +19,7 @@ import { isNodeConnected } from "../services/socketService.js";
 import { HEALTH_CONFIG } from "../lib/nodeHealth.js";
 import { claimTaskOnNode, releaseUnstartedAssignment } from '../services/allocationClaimService.js';
 import { handleTaskFailure } from '../services/secureTaskRoutingService.js';
+import { markRegionalUptimeRunStarted } from '../services/regionalUptimeMonitorService.js';
 
 let bullWorker = null;
 
@@ -67,6 +68,7 @@ export const processTaskJob = async (job) => {
   }
 
   if (!selectedNode) throw new Error(`No eligible node capacity remained for task ${taskId}`);
+  await markRegionalUptimeRunStarted(assignedTask);
   console.log(`[TaskWorker] Selected node ${selectedNode._id} via ${ranking.source}.`);
 
   // 3. Create or update TaskSession

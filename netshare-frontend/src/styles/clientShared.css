@@ -1,0 +1,651 @@
+/* =====================================================================
+   PacketStream-Inspired Shared Design System for NetShare Client Portal
+   ===================================================================== */
+
+:root {
+  --ps-canvas-bg: #070809;
+  --ps-card-bg: #080808;
+  --ps-card-bg-elevated: #0d0d0d;
+  --ps-card-border: rgba(255, 255, 255, 0.1);
+  --ps-card-border-subtle: rgba(255, 255, 255, 0.06);
+
+  --ps-text-white: #ffffff;
+  --ps-text-light: #f1f5f9;
+  --ps-text-muted: #92979d;
+  --ps-text-dim: #777d84;
+
+  --ps-accent-teal: #06b6d4;
+  --ps-accent-violet: #a855f7;
+  --ps-accent-emerald: #10b981;
+  --ps-accent-amber: #f59e0b;
+  --ps-accent-rose: #f43f5e;
+
+  --ps-card-radius: 15px;
+  --ps-btn-radius: 9999px;
+  --ps-input-radius: 12px;
+}
+
+/* ---------------------------------------------------------------------
+   Shared Card Components
+   --------------------------------------------------------------------- */
+
+.ps-card {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--ps-card-bg);
+  border: 1px solid var(--ps-card-border);
+  border-radius: var(--ps-card-radius);
+  padding: 24px;
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.ps-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.ps-card-teal {
+  background:
+    radial-gradient(ellipse 85% 90% at 100% 0%, rgba(6, 182, 212, 0.055), transparent 72%),
+    #080808;
+}
+
+.ps-card-violet {
+  background:
+    radial-gradient(ellipse 85% 90% at 100% 0%, rgba(168, 85, 247, 0.05), transparent 72%),
+    #080808;
+}
+
+.ps-card-amber {
+  background:
+    radial-gradient(ellipse 85% 90% at 100% 0%, rgba(245, 158, 11, 0.045), transparent 72%),
+    #080808;
+}
+
+.ps-card-emerald {
+  background:
+    radial-gradient(ellipse 85% 90% at 100% 0%, rgba(16, 185, 129, 0.045), transparent 72%),
+    #080808;
+}
+
+/* Corner Circular Outline Decoration */
+.ps-card-decor {
+  position: absolute;
+  right: -30px;
+  top: -30px;
+  width: 200px;
+  height: 200px;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.ps-card-decor-outer {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ps-card-teal .ps-card-decor-outer {
+  border-color: rgba(6, 182, 212, 0.18);
+}
+
+.ps-card-violet .ps-card-decor-outer {
+  border-color: rgba(168, 85, 247, 0.18);
+}
+
+.ps-card-decor-inner {
+  position: absolute;
+  inset: 45px;
+  border-radius: 50%;
+  border: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+.ps-card-teal .ps-card-decor-inner {
+  border-color: rgba(6, 182, 212, 0.12);
+}
+
+.ps-card-violet .ps-card-decor-inner {
+  border-color: rgba(168, 85, 247, 0.12);
+}
+
+/* ---------------------------------------------------------------------
+   Shared Typography
+   --------------------------------------------------------------------- */
+
+.ps-page-header {
+  position: relative;
+  box-sizing: border-box;
+  padding: 2px 0 20px 18px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.075);
+}
+
+.ps-page-header::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 0;
+  width: 2px;
+  height: 42px;
+  border-radius: 99px;
+  background: linear-gradient(180deg, #2bd4e5 0%, rgba(6, 182, 212, 0.1) 100%);
+  box-shadow: 0 0 14px rgba(6, 182, 212, 0.22);
+}
+
+.ps-page-header::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 18px;
+  width: 112px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(6, 182, 212, 0.65), transparent);
+}
+
+.ps-page-header > div:first-child {
+  min-width: 0;
+}
+
+.ps-page-header > div:first-child::before {
+  content: "NETSHARE  /  WORKSPACE";
+  display: block;
+  margin-bottom: 7px;
+  color: #46c5d3;
+  font: 700 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.16em;
+}
+
+.ps-page-title {
+  font-size: clamp(25px, 2.1vw, 31px);
+  font-weight: 680;
+  color: #f7f9fb;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.ps-page-subtitle {
+  font-size: 13px;
+  color: var(--ps-text-muted);
+  line-height: 1.55;
+  margin: 7px 0 0;
+  letter-spacing: 0.005em;
+}
+
+@media (max-width: 768px) {
+  .ps-page-header {
+    align-items: flex-start;
+    padding: 0 0 17px 15px;
+    gap: 14px;
+  }
+
+  .ps-page-header::before {
+    height: 36px;
+  }
+
+  .ps-page-header > div:first-child::before {
+    margin-bottom: 6px;
+    font-size: 8px;
+  }
+
+  .ps-page-title {
+    font-size: clamp(23px, 5vw, 28px);
+  }
+
+  .ps-page-header > div:last-child {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+}
+
+.ps-card-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ps-text-white);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.ps-meta-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ps-text-dim);
+  margin-top: 6px;
+  display: block;
+}
+
+.ps-numeral {
+  font-size: 42px;
+  font-weight: 700;
+  color: var(--ps-text-white);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 14px 0 20px;
+}
+
+.ps-desc-text {
+  font-size: 13.5px;
+  color: var(--ps-text-muted);
+  line-height: 1.6;
+}
+
+/* ---------------------------------------------------------------------
+   Shared Buttons
+   --------------------------------------------------------------------- */
+
+.ps-btn-white {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: var(--ps-btn-radius);
+  background: #ffffff;
+  color: #070809;
+  font-size: 13px;
+  font-weight: 650;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 14px rgba(255, 255, 255, 0.15);
+}
+
+.ps-btn-white:hover:not(:disabled) {
+  background: #f1f5f9;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.25);
+}
+
+.ps-btn-white:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ps-btn-dark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: var(--ps-btn-radius);
+  background: #17191d;
+  border: 1px solid var(--ps-card-border);
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.ps-btn-dark:hover:not(:disabled) {
+  background: #202329;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.ps-btn-dark:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ps-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: var(--ps-btn-radius);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ps-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.18);
+  color: #ffffff;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* ---------------------------------------------------------------------
+   Shared Form Controls
+   --------------------------------------------------------------------- */
+
+.ps-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.ps-form-group label {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ps-text-light);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ps-form-group small {
+  font-size: 11.5px;
+  color: var(--ps-text-dim);
+  line-height: 1.5;
+}
+
+.ps-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: var(--ps-input-radius);
+  background: #16181c;
+  border: 1px solid var(--ps-card-border);
+  color: #ffffff;
+  font-size: 13.5px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.ps-input:focus {
+  border-color: var(--ps-accent-teal);
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.15);
+}
+
+.ps-input::placeholder {
+  color: var(--ps-text-dim);
+}
+
+.ps-select {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: var(--ps-input-radius);
+  background: #16181c;
+  border: 1px solid var(--ps-card-border);
+  color: #ffffff;
+  font-size: 13.5px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ps-select:focus {
+  border-color: var(--ps-accent-teal);
+}
+
+.ps-textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px 14px;
+  border-radius: var(--ps-input-radius);
+  background: #16181c;
+  border: 1px solid var(--ps-card-border);
+  color: #ffffff;
+  font-size: 13.5px;
+  outline: none;
+  resize: vertical;
+  transition: all 0.2s ease;
+}
+
+.ps-textarea:focus {
+  border-color: var(--ps-accent-teal);
+}
+
+/* ---------------------------------------------------------------------
+   Shared Data Table & Panel Styles
+   --------------------------------------------------------------------- */
+
+.ps-table-panel-card {
+  width: 100%;
+  box-sizing: border-box;
+  padding: clamp(24px, 2.4vw, 36px);
+}
+
+.ps-panel-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.ps-table-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.ps-search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #14161a;
+  border: 1px solid var(--ps-card-border);
+  border-radius: 9999px;
+  padding: 0 16px;
+  height: 40px;
+  flex: 1;
+  min-width: 260px;
+  max-width: 520px;
+  color: var(--ps-text-dim);
+  transition: border-color 0.2s ease;
+}
+
+.ps-search-input-wrap:focus-within {
+  border-color: var(--ps-accent-teal);
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.15);
+}
+
+.ps-search-field {
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+}
+
+.ps-search-field::placeholder {
+  color: var(--ps-text-dim);
+}
+
+.ps-filter-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ps-filter-pill-btn {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 9999px;
+  background: #14161a;
+  border: 1px solid var(--ps-card-border);
+  color: var(--ps-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ps-filter-pill-btn:hover {
+  background: #1c1f24;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.ps-filter-pill-btn.active {
+  background: #ffffff;
+  color: #070809;
+  border-color: #ffffff;
+}
+
+.ps-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ps-data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ps-table-url {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
+  color: #28c3d4;
+}
+
+.ps-table-url:hover {
+  text-decoration: underline;
+}
+
+.ps-data-table th {
+  text-align: left;
+  padding: 14px 18px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ps-text-dim);
+  border-bottom: 1px solid var(--ps-card-border);
+  white-space: nowrap;
+}
+
+.ps-data-table td {
+  padding: 16px 18px;
+  font-size: 13.5px;
+  color: var(--ps-text-light);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.ps-data-table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.ps-data-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* ---------------------------------------------------------------------
+   Shared Status Badges
+   --------------------------------------------------------------------- */
+
+.ps-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+  letter-spacing: 0.02em;
+}
+
+.ps-badge.completed,
+.ps-badge.settled,
+.ps-badge.success {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.ps-badge.running,
+.ps-badge.assigned,
+.ps-badge.active {
+  background: rgba(6, 182, 212, 0.12);
+  color: #28c3d4;
+  border: 1px solid rgba(6, 182, 212, 0.25);
+}
+
+.ps-badge.pending {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.ps-badge.failed,
+.ps-badge.cancelled,
+.ps-badge.error {
+  background: rgba(244, 63, 94, 0.12);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.25);
+}
+
+/* ---------------------------------------------------------------------
+   Shared Empty & Loading States
+   --------------------------------------------------------------------- */
+
+.ps-empty-state {
+  text-align: center;
+  padding: 50px 20px;
+  color: var(--ps-text-dim);
+  font-size: 13.5px;
+}
+
+.ps-loading-state {
+  padding: 40px;
+  text-align: center;
+  color: var(--ps-text-dim);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Alerts */
+.ps-alert {
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ps-alert.error {
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  color: #fca5a5;
+}
+
+.ps-alert.success {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #6ee7b7;
+}

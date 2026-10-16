@@ -6,4 +6,5 @@ logs/
 *.log
 npm-debug.log*
 uploads/
+private/
 coverage/

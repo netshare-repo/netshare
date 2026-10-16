@@ -37,13 +37,13 @@
 .status-inactive,
 .status-stopped {
   background: rgba(148, 163, 184, 0.15);
-  color: #94a3b8;
+  color: #a2a6ab;
   border: 1px solid rgba(148, 163, 184, 0.3);
 }
 
 .status-inactive .status-dot,
 .status-stopped .status-dot {
-  background: #94a3b8;
+  background: #a2a6ab;
 }
 
 .status-busy,

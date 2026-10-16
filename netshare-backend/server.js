@@ -18,6 +18,7 @@ import userRoutes from './routes/userRoutes.js';
 import nodeRoutes from './routes/nodeRoutes.js';
 import walletRoutes from './routes/walletRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
+import regionalUptimeMonitorRoutes from './routes/regionalUptimeMonitorRoutes.js';
 import sessionRoutes from './routes/sessionRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
@@ -31,7 +32,12 @@ import TaskResult from './models/TaskResult.js';
 import CreditTransaction from './models/CreditTransaction.js';
 import TopUpRequest from './models/TopUpRequest.js';
 import WithdrawalRequest from './models/WithdrawalRequest.js';
+import ScreenshotArtifact from './models/ScreenshotArtifact.js';
+import RegionalUptimeMonitor from './models/RegionalUptimeMonitor.js';
+import RegionalUptimeRun from './models/RegionalUptimeRun.js';
 import { startTaskRecovery } from './services/taskRecoveryService.js';
+import { startScreenshotArtifactCleanup } from './services/screenshotArtifactService.js';
+import { startRegionalUptimeScheduler } from './services/regionalUptimeScheduler.js';
 import { ensureIdentityIndexes } from './services/identityService.js';
 import { ensureFinancialIndexes } from './services/indexMigrationService.js';
 
@@ -42,6 +48,8 @@ await ensureFinancialIndexes();
 // Do not serve writes before the deduplication/ownership indexes are ready.
 await Promise.all([AnomalyAlert.init(), Notification.init(), Dispute.init(), TaskResult.init(),
   CreditTransaction.init(), TopUpRequest.init(), WithdrawalRequest.init()]);
+await Promise.all([RegionalUptimeMonitor.init(), RegionalUptimeRun.init()]);
+await ScreenshotArtifact.init();
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -70,7 +78,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-NetShare-Artifact-Grant', 'Idempotency-Key'],
 };
 app.use(cors(corsOptions));
 
@@ -128,6 +136,7 @@ app.use('/api/node', nodeRoutes);
 app.use('/api/nodes', nodeRoutes); // Legacy compatibility alias
 app.use('/api/wallet', walletRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/uptime-monitors', regionalUptimeMonitorRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
@@ -149,6 +158,7 @@ const io = await initSocketServer(httpServer);
 (async () => {
   await initTaskQueue();
   startTaskWorker();
+  startRegionalUptimeScheduler();
   if (config.nodeEnv !== 'test') startTaskRecovery();
 })();
 
@@ -166,5 +176,6 @@ httpServer.listen(config.port, () => {
 
 registerShutdownHandlers(httpServer, io);
 if (config.nodeEnv !== 'test') startMonitoring();
+if (config.nodeEnv !== 'test') startScreenshotArtifactCleanup();
 
 export { app, httpServer, io };
